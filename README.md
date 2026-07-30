@@ -1,41 +1,41 @@
-# YinwuEnchant — Custom Enchantment System
+# YinwuEnchant — 自定义附魔系统
 
-21 custom enchantments registered via Paper Registry.
+Paper Registry 注册的 21 个自定义附魔。
 
-## Enchantment List
+## 附魔列表
 
-| Enchantment | Effect | Slot |
-|------------|--------|------|
-| Clearsight | Negate darkness | Helmet |
-| Darkspeed | Speed in dark areas | Boots |
-| Safefall | Reduce fall damage | Leggings |
-| Sonic Boom | Charge and fire sonic wave | Chestplate |
-| Undermine | Faster mining below sea level | Tools |
-| Resonate | Shield reflect damage | Shield |
-| Shrieker Sense | Highlight wardens/sculk with spyglass | Spyglass |
-| Cat's Paw | Scare creepers | Boots |
-| Nasus | Scare skeletons | Helmet |
-| Phantom Protection | Repel phantoms | Chestplate/Elytra |
-| Master of Beef Slicing | Extra meat drops (Looting+Fire Aspect synergy) | Sword |
-| Harvest | Right-click harvest crops | Hoe |
-| Smelt | Auto-smelt mined blocks | Tools |
-| Soulbound | Keep items on death | All |
-| Lava Walker | Walk on lava (5s revert) | Boots |
-| Emerald Till | Chance for emeralds from grass | Hoe |
-| Step Up | Increased step height | Boots |
-| Airbag | Reduce Elytra collision damage | Elytra |
-| Bless | Totem triggers teleport to spawn | Chestplate |
-| Vampire Curse | [Cursed] Burn in sun, regen at night | Helmet |
-| Insomnia | [Cursed] Cannot sleep | Helmet |
+| 附魔 | 效果 | 适用部位 | 获取来源 |
+|------|------|---------|---------|
+| 明目 | 无视黑暗效果 | 头盔 | 幽匿维度 |
+| 黑暗行者 | 黑暗区域加速 | 靴子 | 幽匿维度 |
+| 外骨骼 | 减免摔落伤害 | 护腿 | 幽匿维度 |
+| 音波爆裂 | 蓄力发射音波 | 胸甲 | 幽匿维度 |
+| 深层矿工 | 海平面以下挖掘加速 | 工具 | 幽匿维度 |
+| 共振 | 盾牌格挡反弹伤害 | 盾牌 | 幽匿维度 |
+| 幽匿探测 | 望远镜高亮监守者 | 望远镜 | 幽匿维度 |
+| 猫爪 | 恐吓苦力怕 | 靴子 | 击杀猪灵 |
+| 狗头 | 恐吓骷髅 | 头盔 | 击杀潜影贝 |
+| 幻影 | 驱离幻翼 | 胸甲/鞘翅 | 击杀幻翼 |
+| 切肉大师 | 额外掉落肉类，联动抢夺+火焰附加出熟肉 | 剑 | 击杀掠夺者 |
+| 丰收 | 右键大范围收获作物并补种 | 锄头 | 钓鱼 |
+| 熔化 | 自动熔炼挖掘方块 | 工具 | 未知 |
+| 灵魂绑定 | 死亡保留物品 | 全装备 | 击杀幻术师 |
+| 熔岩行者 | 熔岩→岩浆块行走，5 秒后恢复 | 靴子 | 下界探索 |
+| 拾翠 | 破坏草丛概率掉落绿宝石 | 锄头 | 未知 |
+| 马蹄 | 提高步高 | 靴子 | 未知 |
+| 气囊 | 减少飞行撞墙伤害 | 鞘翅 | 未知 |
+| 护佑 | 不死图腾触发后传送回重生点 | 胸甲 | 未知 |
+| 吸血鬼诅咒 | [负面] 白天燃烧，夜晚回复+抗性 | 头盔 | 诅咒 |
+| 失眠 | [负面] 无法入睡 | 头盔 | 诅咒 |
 
-## Features
+## 互斥规则
 
-- Vanilla mutual exclusion via `exclusiveWith()`
-- All Folia thread-safe with correct cross-region scheduling
-- Registered via `RegistryEvents.ENCHANTMENT.compose()`
+- 熔化、丰收、拾翠 ↔ 精准采集
+- 熔岩行者 ↔ 深海探索者、冰霜行者
+- 灵魂绑定 ↔ 消失诅咒
 
-## Tech Stack
+## 技术栈
 
-- Java 21, Paper API 1.21+, Folia compatible
-- PluginBootstrap + RegistryComposeEvent
-- PDC + vanilla enchantment dual storage
+- Java 21, Paper API 1.21+, Folia 兼容
+- PluginBootstrap + RegistryComposeEvent 原生注册
+- 全部附魔 Folia 线程安全
