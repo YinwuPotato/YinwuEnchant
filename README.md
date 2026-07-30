@@ -1,41 +1,44 @@
 # YinwuEnchant — 自定义附魔系统
 
-Version: 1.2.1
+Version: **1.2.1**
 
-通过 Paper 1.21.4 RegistryComposeEvent 注册的 21 个自定义附魔。
+通过 Paper RegistryComposeEvent 注册的 21 个自定义附魔。
+
+## 前置插件
+
+- [YinwuPluginLib](https://github.com/qumingjam/YinwuPluginLib)（必需）
 
 ## 完整附魔列表
 
 | 附魔 ID | 中文名 | 效果 | 适用 | 来源 |
 |---------|--------|------|------|------|
 | clearsight | 明目 | 无视黑暗效果 | 头盔 | 幽匿维度探索 |
-| darkspeed | 黑暗行者 | 黑暗区域增加移动速度 (3级) | 靴子 | 幽匿维度探索 |
-| safefall | 外骨骼 | 减免摔落伤害 (3级) | 护腿 | 幽匿维度探索 |
+| darkspeed | 黑暗行者 | 黑暗区域增加移动速度（3级） | 靴子 | 幽匿维度探索 |
+| safefall | 外骨骼 | 减免摔落伤害（3级） | 护腿 | 幽匿维度探索 |
 | sonic_boom | 音波爆裂 | 蹲下蓄力发射音波 | 胸甲 | 幽匿维度探索 |
-| undermine | 深层矿工 | 海平面以下低光照挖掘加速 (5级) | 工具 | 幽匿维度探索 |
+| undermine | 深层矿工 | 海平面以下低光照挖掘加速（5级） | 工具 | 幽匿维度探索 |
 | resonate | 共振 | 盾牌格挡反弹伤害 | 盾牌 | 幽匿维度探索 |
 | shrieker_sense | 幽匿探测 | 望远镜高亮监守者与尖啸体 | 望远镜 | 幽匿维度探索 |
 | cats_paw | 猫爪 | 周期性恐吓周围苦力怕 | 靴子 | 击杀猪灵 |
 | nasus | 狗头 | 周期性恐吓周围骷髅 | 头盔 | 击杀潜影贝 |
 | phantom | 幻影 | 驱离周围幻翼 | 胸甲/鞘翅 | 击杀幻翼 |
-| master_of_beef_slicing | 切肉大师 | 攻击生物额外掉落肉类 (3级)，联动抢夺+火焰附加出熟肉 | 剑 | 击杀掠夺者 |
+| master_of_beef_slicing | 切肉大师 | 额外掉落肉类（3级），联动抢夺+火焰附加出熟肉 | 剑 | 击杀掠夺者 |
 | harvest | 丰收 | 右键大范围收获成熟作物并自动补种 | 锄头 | 钓鱼 |
-| smelt | 熔化 | 自动熔炼挖掘的方块（100+ 配方） | 工具 | 未知 |
-| soulbound | 灵魂绑定 | 死亡保留附魔物品 | 全装备 | 击杀幻术师 (10%) |
+| smelt | 熔化 | 自动熔炼挖掘方块（100+配方） | 工具 | 未知 |
+| soulbound | 灵魂绑定 | 死亡保留附魔物品 | 全装备 | 击杀幻术师（10%） |
 | lava_walker | 熔岩行者 | 熔岩→岩浆块行走，5秒后恢复 | 靴子 | 下界探索 |
 | emerald_till | 拾翠 | 破坏草丛概率掉落绿宝石，受时运影响 | 锄头 | 未知 |
-| step_up | 马蹄 | 提高步高直接走上1格高方块 (2级) | 靴子 | 未知 |
-| airbag | 气囊 | 减少飞行撞墙伤害 (3级) | 鞘翅 | 未知 |
+| step_up | 马蹄 | 提高步高直接走上1格高方块（2级） | 靴子 | 未知 |
+| airbag | 气囊 | 减少飞行撞墙伤害（3级） | 鞘翅 | 未知 |
 | bless | 护佑 | 不死图腾触发后传送回重生点 | 胸甲 | 未知 |
-| vampire_curse | 吸血鬼诅咒 | [负面] 白天阳光直射燃烧，夜晚生命回复+抗性 | 头盔 | 诅咒 |
+| vampire_curse | 吸血鬼诅咒 | [负面] 白天燃烧，夜晚生命回复+抗性 | 头盔 | 诅咒 |
 | insomnia | 失眠 | [负面] 无法入睡但可设重生点 | 头盔 | 诅咒 |
 
-## 原版互斥
+## 原版互斥（exclusiveWith）
 
-通过 exclusiveWith() 声明，由 Bukkit 原生系统处理：
-- 熔化 / 丰收 / 拾翠 ↔ 精准采集 (Silk Touch)
-- 熔岩行者 ↔ 深海探索者 (Depth Strider) / 冰霜行者 (Frost Walker)
-- 灵魂绑定 ↔ 消失诅咒 (Curse of Vanishing)
+- 熔化 / 丰收 / 拾翠 ↔ 精准采集（Silk Touch）
+- 熔岩行者 ↔ 深海探索者（Depth Strider）/ 冰霜行者（Frost Walker）
+- 灵魂绑定 ↔ 消失诅咒（Curse of Vanishing）
 
 ## 获取方式
 
@@ -43,9 +46,12 @@ Version: 1.2.1
 - **钓鱼** — 部分附魔可通过钓鱼获得
 - **铁砧合并** — 两本同级附魔书可在铁砧合并升级
 
+## 下载
+
+[YinwuEnchant-1.2.1.jar](https://github.com/qumingjam/YinwuEnchant/releases/download/v1.2.1/YinwuEnchant-1.2.1.jar)
+
 ## 技术栈
 
-Java 21, Paper API 1.21.8+, Folia 兼容
-PluginBootstrap + RegistryComposeEvent 注册
-全部 21 个附魔 Folia 线程安全，正确处理跨区域调度
-ConfigManager 配置化启停 + 参数调节
+Java 21, Paper API 1.21+, Folia 兼容
+PluginBootstrap + RegistryComposeEvent 原生注册
+全部 21 附魔 Folia 线程安全
