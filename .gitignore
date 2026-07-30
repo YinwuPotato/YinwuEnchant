@@ -1,0 +1,23 @@
+## Maven
+target/
+*.jar
+*.war
+
+## IDE
+.idea/
+*.iml
+.lingma/
+.vscode/
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Logs
+*.log
+
+## Temp
+untitled-*.md
+
+## Project notes (local only)
+agents.md

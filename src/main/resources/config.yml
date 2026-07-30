@@ -1,0 +1,318 @@
+# =========================================
+# YinwuEnchant 配置文件
+# =========================================
+# 插件版本: 1.1.1
+# 附魔数量: 21个自定义附魔
+#
+# 附魔列表:
+# 1. 猫爪 (cats_paw) - 击退周围苦力怕
+# 2. 狗头 (nasus) - 击退周围骷髅类怪物
+# 3. 切肉大师 (master_of_beef_slicing) - 击杀动物掉落更多肉类
+# 4. 明目 (clearsight) - 免疫黑暗和失明效果
+# 5. 黑暗行者 (darkspeed) - 在黑暗中获得速度加成
+# 6. 共振 (resonate) - 盾牌格挡时反弹伤害
+# 7. 外骨骼 (safefall) - 减少摔落伤害
+# 8. 幽匿探测 (shrieker_sense) - 使用望远镜探测监守者和尖啸体
+# 9. 音波爆裂 (sonic_boom) - 熄灭附近的灵魂营火和灵魂火
+# 10. 深层矿工 (undermine) - 在地下低光照环境获得挖掘速度加成
+# 11. 幻影 (phantom) - 防止幻翼攻击
+# 12. 丰收 (harvest) - 收获5x5x5范围的成熟作物（支持浆果丛，无需重新种植）
+# 13. 灵魂绑定 (soulbound) - 死亡时保留附魔物品，不掉落不丢失
+# 14. 熔化 (smelt) - 自动熔炼挖掘的方块（先时运后熔炼，与精准采集互斥）
+# 15. 气囊 (airbag) - 减少鞘翅飞行时撞击墙壁的伤害
+# 16. 护佑 (bless) - 触发不死图腾后传送回重生点
+# 17. 吸血鬼诅咒 (vampire_curse) - 白天阳光直射会燃烧，夜晚获得生命回复与抗性提升（负面）
+# 18. 失眠 (insomnia) - 无法入睡但可设重生点，积累未睡眠天数生成幻翼（负面）
+# 19. 熔岩行者 (lava_walker) - 行走时将脚下熔岩临时替换为岩浆块，搭配冰霜行者可水陆无伤
+# 20. 拾翠 (emerald_till) - 用锄头破坏草丛/蕨/枯灌木概率掉落绿宝石，时运加成
+# 21. 马蹄 (step_up) - 提高步高，可直接走上1格高方块
+#
+# =========================================
+# 其他插件API调用方法
+# =========================================
+# 如果你的插件想要生成自定义附魔书并添加到战利品容器，可以使用以下API:
+#
+# 1. 获取插件实例:
+#    Plugin yinwuPlugin = Bukkit.getPluginManager().getPlugin("YinwuEnchant");
+#    if (yinwuPlugin instanceof YinwuEnchantments) {
+#        YinwuEnchantments yinwu = (YinwuEnchantments) yinwuPlugin;
+#        EnchantmentAcquisitionManager api = yinwu.getAcquisitionManager();
+#    }
+#
+# 2. 创建附魔书:
+#    ItemStack book = api.createEnchantedBook("cats_paw", 3);  // 创建猫爪 III
+#
+# 3. 获取所有附魔ID:
+#    String[] ids = api.getAvailableEnchantmentIds();
+#    // 返回: ["airbag", "bless", "cats_paw", "emerald_till", "insomnia", "lava_walker", "nasus", "master_of_beef_slicing", "clearsight", "darkspeed", "resonate", "safefall", "shrieker_sense", "sonic_boom", "step_up", "undermine", "vampire_curse", "phantom", "harvest", "soulbound", "smelt"]
+#
+# 4. 获取附魔最大等级:
+#    int maxLevel = api.getMaxLevel("cats_paw");  // 返回: 3
+#
+# 5. 添加到战利品容器:
+#    chestInventory.addItem(book);
+#
+# 完整示例请查看插件文档或联系开发者
+# =========================================
+
+# 启用/禁用附魔
+enchantments:
+  clearsight:
+    enabled: true
+    # 检查间隔（刻），默认为20刻（1秒）
+    check-interval: 20
+  darkspeed:
+    enabled: true
+    # 黑暗判定光照等级（0-15）
+    dark-light-level: 7
+    # 速度加成（每级）
+    speed-per-level: 0.1
+    # 粒子效果间隔（刻）
+    particle-interval: 10
+    # 音效间隔（刻）
+    sound-interval: 40
+    # 粒子类型
+    particle-type: SOUL_FIRE_FLAME
+    # 音效类型
+    sound-type: BLOCK_SOUL_SAND_STEP
+  resonate:
+    enabled: true
+    # 伤害反弹比例（每级）
+    damage-reflect-per-level: 0.2
+    # 音效类型
+    sound-type: ENTITY_IRON_GOLEM_HURT
+  safefall:
+    enabled: true
+    # 每级减少的摔落伤害比例（0.0-1.0）
+    damage-reduction-per-level: 0.3
+    # 每级增加的安全掉落高度
+    safe-fall-height-per-level: 2
+  shrieker_sense:
+    enabled: true
+    # 高亮范围（方块）- 使用望远镜时的探测范围
+    highlight-range: 48
+    # 高亮颜色（RGB）
+    highlight-color: '#00FF00'
+    # 高亮持续时间（刻）- 60秒 = 1200刻
+    highlight-duration: 1200
+    # TextDisplay 位置偏移（相对于尖啸体方块）
+    text-display-offset:
+      x: 0.5
+      y: 0.5
+      z: 0.5
+    # 冷却时间（秒）- 防止恶意触发
+    cooldown: 10
+  sonic_boom:
+    enabled: true
+    # 冷却时间（秒）
+    cooldown: 10
+    # 伤害值
+    damage: 8.0
+    # 射程（方块）
+    range: 24
+    # 蓄力时间（刻）
+    charge-ticks: 60
+    # 免疫生物列表（音波不会伤害这些生物）
+    immune-mobs:
+    - VILLAGER
+  undermine:
+    enabled: true
+    # 最大挖掘速度加成（倍率）
+    max-efficiency-multiplier: 2.0
+    # 每级增加的挖掘速度
+    efficiency-per-level: 0.2
+    # 触发条件：Y坐标上限
+    trigger-y-max: 60
+    # 触发条件：最大光照等级
+    trigger-light-max: 7
+    # 检查间隔（刻）
+    check-interval: 10
+  cats_paw:
+    enabled: true
+    # 检测范围（格）
+    range: 16.0
+    # 检查间隔（刻）- 60刻=3秒
+    check-interval: 60
+  nasus:
+    enabled: true
+    # 检测范围（格）
+    range: 16.0
+    # 检查间隔（刻）- 60刻=3秒
+    check-interval: 60
+  master_of_beef_slicing:
+    enabled: true
+    # 1级掉落数量范围
+    drop-amount-level-1-min: 0
+    drop-amount-level-1-max: 2
+    # 2级掉落数量范围
+    drop-amount-level-2-min: 1
+    drop-amount-level-2-max: 4
+    # 3级掉落数量范围
+    drop-amount-level-3-min: 2
+    drop-amount-level-3-max: 6
+  phantom:
+    enabled: true
+    # 幻翼检测范围（格）
+    scan-range: 48.0
+    # 扫描间隔（刻）
+    scan-interval: 40
+  harvest:
+    enabled: true
+    # 收获范围（以目标方块为中心，各方向的格数）
+    # range=2 表示 5x5x5 范围（中心±2格）
+    # range=3 表示 7x7x7 范围（中心±3格）
+    range: 2
+    # 冷却时间（刻）
+    cooldown-ticks: 60
+  soulbound:
+    enabled: true
+  smelt:
+    enabled: true
+  airbag:
+    enabled: true
+    # 每级减免比例（0.0-1.0），3级时最多减免 95%
+    reduction-per-level: 0.4
+    # 冷却时间（游戏刻），全额触发后冷却期间减免减半
+    cooldown-ticks: 100
+  bless:
+    enabled: true
+  vampire_curse:
+    enabled: true
+    # 检测间隔（刻）- 40刻=2秒
+    check-interval: 40
+  insomnia:
+    enabled: true
+  lava_walker:
+    enabled: true
+    # 防火刷新间隔（刻）
+    fire-cooldown-ticks: 100
+    # 防火持续时间（刻）
+    fire-duration-ticks: 120
+    # 岩浆块还原延迟（刻）
+    revert-delay-ticks: 100
+    # 站定刷新间隔（刻）
+    stationary-interval: 20
+  emerald_till:
+    enabled: true
+    # 基础掉落概率（5%）
+    emerald-drop-chance: 0.05
+    # 每级时运增加的额外概率（+3%/级）
+    fortune-chance-bonus: 0.03
+    # 每级时运增加的额外最大掉落数（如时运III最多额外+3个）
+    fortune-amount-bonus: 1
+  step_up:
+    enabled: true
+    # 1级步高
+    step-height-level-1: 1.0
+    # 2级步高
+    step-height-level-2: 1.25
+
+# 附魔获取设置 — 按附魔分组，未列出的附魔无获取途径
+# 每项都可配：mob-drops（击杀掉落）、fishing（钓鱼）、loot-tables（战利品箱）
+# 战利品箱 key 参考 https://minecraft.wiki/w/Loot_table#List_of_loot_tables
+acquisition:
+  phantom:
+    enabled: true
+    mob-drops:
+      - entity: PHANTOM
+        chance: 0.05
+        level-min: 1
+        level-max: 1
+  master_of_beef_slicing:
+    enabled: true
+    mob-drops:
+      - entity: PILLAGER
+        chance: 0.03
+        level-min: 1
+        level-max: 3
+      - entity: VINDICATOR
+        chance: 0.03
+        level-min: 1
+        level-max: 3
+      - entity: EVOKER
+        chance: 0.03
+        level-min: 1
+        level-max: 3
+  cats_paw:
+    enabled: true
+    mob-drops:
+      - entity: PIGLIN
+        chance: 0.02
+        level-min: 1
+        level-max: 1
+      - entity: PIGLIN_BRUTE
+        chance: 0.02
+        level-min: 1
+        level-max: 1
+  nasus:
+    enabled: true
+    mob-drops:
+      - entity: SHULKER
+        chance: 0.015
+        level-min: 1
+        level-max: 1
+  harvest:
+    enabled: true
+    fishing:
+      chance: 0.02
+      level-min: 1
+      level-max: 1
+  smelt:
+    enabled: true
+    mob-drops:
+      - entity: MAGMA_CUBE
+        chance: 0.01
+        level-min: 1
+        level-max: 1
+  airbag:
+    enabled: true
+    mob-drops:
+      - entity: BAT
+        chance: 0.05
+        level-min: 1
+        level-max: 1
+  bless:
+    enabled: true
+    mob-drops:
+      - entity: WARDEN
+        chance: 1.0
+        level-min: 1
+        level-max: 1
+  lava_walker:
+    enabled: true
+    mob-drops:
+      - entity: STRIDER
+        chance: 0.1
+        level-min: 1
+        level-max: 2
+  emerald_till:
+    enabled: true
+    mob-drops:
+      - entity: WANDERING_TRADER
+        chance: 0.3
+        level-min: 1
+        level-max: 1
+  vampire_curse:
+    enabled: true
+    mob-drops:
+      - entity: ZOGLIN
+        chance: 0.1
+        level-min: 1
+        level-max: 1
+  insomnia:
+    enabled: true
+    mob-drops:
+      - entity: COPPER_GOLEM
+        chance: 0.1
+        level-min: 1
+        level-max: 1
+  soulbound:
+    enabled: true
+    mob-drops:
+      - entity: ILLUSIONER
+        chance: 0.1
+        level-min: 1
+        level-max: 1
+
+# 调试模式
+debug: false

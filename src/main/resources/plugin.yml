@@ -1,0 +1,18 @@
+name: ${project.name}
+version: '${project.version}'
+main: yinwuenchant.YinwuEnchantments
+api-version: '1.21'
+folia-supported: true
+authors: ['qumingjam']
+description: '添加十一个独特的自定义附魔：猫爪、狗头、切肉大师、明目、黑暗行者、共振、外骨骼、幽匿探测、音波爆裂、深层矿工、幻影守护者'
+commands:
+    ye:
+        description: '自定义附魔插件主命令'
+        aliases: ['yinwuenchant']
+permissions:
+    yinwuenchant.use:
+        description: '使用自定义附魔命令'
+        default: true
+    yinwuenchant.admin:
+        description: '管理自定义附魔插件'
+        default: op
