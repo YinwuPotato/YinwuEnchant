@@ -2,7 +2,6 @@ package yinwuenchant.manager;
 
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.enchantments.CustomEnchantment;
-import yinwuenchant.enchantments.Darkspeed;
 import yinwuenchant.enchantments.ShriekerSense;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
@@ -13,15 +12,14 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityResurrectEvent;
-import org.bukkit.event.entity.EntityTargetEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerItemBreakEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 
 public class EventListener implements Listener {
@@ -65,22 +63,12 @@ public class EventListener implements Listener {
     }
 
     @EventHandler
-    public void onEntityTarget(EntityTargetEvent event) {
-        enchantmentManager.dispatchEvent(event);
-    }
-
-    @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         enchantmentManager.dispatchEvent(event);
     }
 
     @EventHandler
     public void onCreatureSpawn(CreatureSpawnEvent event) {
-        enchantmentManager.dispatchEvent(event);
-    }
-
-    @EventHandler
-    public void onPlayerItemBreak(PlayerItemBreakEvent event) {
         enchantmentManager.dispatchEvent(event);
     }
 
@@ -100,8 +88,18 @@ public class EventListener implements Listener {
     }
 
     @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        enchantmentManager.dispatchEvent(event);
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        enchantmentManager.dispatchEvent(event);
+    }
+
+    @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // 先 dispatch 给事件订阅者（CatsPaw、Nasus、LavaWalker、StepUp 等）
+        // 先 dispatch 给事件订阅者（CatsPaw、Nasus、StepUp、SonicBoom 等）
         enchantmentManager.dispatchEvent(event);
 
         // 玩家离线时清理 ShriekerSense 的 TextDisplay
@@ -109,17 +107,6 @@ public class EventListener implements Listener {
         if (shriekerSense instanceof ShriekerSense) {
             ((ShriekerSense) shriekerSense).cleanupPlayer(event.getPlayer().getUniqueId());
         }
-
-        // 玩家离线时清理 Darkspeed 的速度缓存（防止内存泄漏）
-        CustomEnchantment darkspeed = enchantmentManager.getEnchantment("darkspeed");
-        if (darkspeed instanceof Darkspeed) {
-            ((Darkspeed) darkspeed).cleanupPlayerCache(event.getPlayer().getUniqueId());
-        }
-    }
-
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        enchantmentManager.refreshAllCaches(event.getPlayer());
     }
 
     @EventHandler
@@ -127,14 +114,6 @@ public class EventListener implements Listener {
         // GUI 锁定
         if (event.getView().getTitle().contains("Yinwu附魔列表")) {
             event.setCancelled(true);
-            return;
-        }
-        // 装备变更时刷新所有附魔缓存（遍历所有装备槽读一次 PDC）
-        if (event.getWhoClicked() instanceof org.bukkit.entity.Player player) {
-            // 延迟 1 tick 确保物品已生效（Folia 最小延迟）
-            player.getScheduler().runDelayed(plugin, t -> {
-                if (player.isOnline()) enchantmentManager.refreshAllCaches(player);
-            }, null, 1L);
         }
     }
 }

@@ -21,12 +21,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ShriekerSense extends CustomEnchantment {
     private final ConfigManager configManager;
     private final Set<EntityType> sculkEntities;
     // 存储每个玩家创建的 TextDisplay 实体列表（使用 ConcurrentHashMap 保证线程安全）
     private final Map<UUID, List<TextDisplay>> playerTextDisplays = new ConcurrentHashMap<>();
+    // TextDisplay 位置 → 实体（供方块破坏时按位置直接查，避免跨区域遍历）
+    private final Map<Location, TextDisplay> textDisplayByLocation = new ConcurrentHashMap<>();
     // 存储每个玩家的冷却时间（UUID -> 最后使用时间戳，毫秒）
     private final Map<UUID, Long> playerCooldowns = new ConcurrentHashMap<>();
 
@@ -39,76 +42,55 @@ public class ShriekerSense extends CustomEnchantment {
         // 初始化潜声系列生物列表
         sculkEntities = new HashSet<>();
         sculkEntities.add(EntityType.WARDEN);
-
-        // ✅ 移除构造函数中的事件注册，改为在 onEnable() 中注册
     }
 
-        @Override
+    @Override
     public Component displayName(int level) {
         return Component.text("幽匿探测 " + getRomanNumeral(level));
     }
-
-
 
     @Override
     public void onEnable() {
         boolean enabled = configManager.isEnchantmentEnabled("shrieker_sense");
 
-        // ✅ 调试日志：确认 onEnable 被调用
         if (plugin.getConfigManager().getBoolean("debug")) {
-            plugin.getLogger().fine("[幽匿探测] onEnable() 被调用, enabled=" + enabled);  // ✅ 使用 fine 级别
+            plugin.getLogger().fine("[幽匿探测] onEnable() 被调用, enabled=" + enabled);
         }
 
         if (!enabled) {
             return;
         }
-
-        // ⚠️ 事件订阅注册由 EnchantmentManager.enableAll() 统一调用 registerEventSubscribers()
-        // 此处不再重复注册，避免事件处理器被注册两次
     }
 
     @Override
     public void onDisable() {
-        // ✅ 修复：区分 reload 和服务器关闭场景
-        // - reload 时：必须手动清理所有 TextDisplay，防止残留
-        // - 服务器关闭时：Minecraft 会自动清理，但手动清理也无妨
-
         if (plugin.getConfigManager().getBoolean("debug")) {
             int totalDisplays = playerTextDisplays.values().stream()
                 .mapToInt(List::size)
                 .sum();
-            plugin.getLogger().fine("[幽匿探测] 开始清理 " + totalDisplays + " 个 TextDisplay");  // ✅ 使用 fine 级别
+            plugin.getLogger().fine("[幽匿探测] 开始清理 " + totalDisplays + " 个 TextDisplay");
         }
 
-        // ✅ 遍历并移除所有 TextDisplay 实体
-        for (List<TextDisplay> displays : playerTextDisplays.values()) {
-            for (TextDisplay display : displays) {
-                if (display != null && !display.isDead()) {
-                    try {
-                        // 在实体所在区域线程执行移除操作（Folia 要求）
-                        Location loc = display.getLocation();
-                        plugin.getServer().getRegionScheduler().run(plugin, loc, (task) -> {
-                            if (!display.isDead()) {
-                                display.remove();
-                            }
-                        });
-                    } catch (Exception e) {
-                        // 如果实体已经被移除或位置无效，忽略错误
-                        if (plugin.getConfigManager().getBoolean("debug")) {
-                            plugin.getLogger().fine("[幽匿探测] 清理 TextDisplay 时出错: " + e.getMessage());
-                        }
+        // 遍历并移除所有 TextDisplay 实体（位置表提供所属 region，避免跨区域读）
+        for (Map.Entry<Location, TextDisplay> entry : textDisplayByLocation.entrySet()) {
+            final Location loc = entry.getKey();
+            final TextDisplay display = entry.getValue();
+            try {
+                plugin.getServer().getRegionScheduler().run(plugin, loc, (task) -> {
+                    if (!display.isDead()) {
+                        display.remove();
                     }
+                });
+            } catch (Exception e) {
+                if (plugin.getConfigManager().getBoolean("debug")) {
+                    plugin.getLogger().fine("[幽匿探测] 清理 TextDisplay 时出错: " + e.getMessage());
                 }
             }
         }
 
-        // 清空引用列表
         playerTextDisplays.clear();
+        textDisplayByLocation.clear();
         playerCooldowns.clear();
-
-        if (plugin.getConfigManager().getBoolean("debug")) {
-            plugin.getLogger().fine("[幽匿探测] TextDisplay 清理完成");  // ✅ 使用 fine 级别
-        }
     }
 
     @Override
@@ -132,17 +114,12 @@ public class ShriekerSense extends CustomEnchantment {
                     long cooldownMillis = cooldownSeconds * 1000L;
 
                     if (lastUseTime != null && (currentTime - lastUseTime) < cooldownMillis) {
-                        // 还在冷却中，计算剩余时间
                         long remainingMillis = cooldownMillis - (currentTime - lastUseTime);
                         int remainingSeconds = (int) Math.ceil(remainingMillis / 1000.0);
 
-                        // 提示玩家冷却中
                         player.sendActionBar("§c幽匿探测冷却中... 还剩 " + remainingSeconds + " 秒");
-
-                        // 播放错误音效
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.5f, 0.5f);
-
-                        return; // 阻止触发
+                        return;
                     }
 
                     // 更新冷却时间
@@ -163,19 +140,20 @@ public class ShriekerSense extends CustomEnchantment {
                         }
                     }
 
-                    // 高亮附近的幽匿尖啸体（方块）- 使用 TextDisplay
-                    int shriekerCount = highlightSculkShriekers(player, range, duration);
+                    // 高亮附近的幽匿尖啸体（方块）- 按 chunk 分组调度到所属 region 扫描
+                    AtomicInteger shriekerCount = new AtomicInteger();
+                    highlightSculkShriekers(player, range, duration, shriekerCount);
 
-                    // 播放经验球拾取音效
-                    player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
-
-                    // 给玩家提示
-                    player.sendActionBar("§a幽匿探测已激活！检测到 " + entityCount + " 个监守者, " + shriekerCount + " 个尖啸体");
-
-                    // 调试信息
-                    if (configManager.getBoolean("debug")) {
-                        plugin.getLogger().fine("ShriekerSense: 范围=" + range + ", 持续时间=" + duration + "刻, 监守者=" + entityCount + ", 尖啸体=" + shriekerCount);  // ✅ 使用 fine 级别
-                    }
+                    // 延迟三拍统计后再回玩家线程发提示
+                    final int finalEntityCount = entityCount;
+                    player.getScheduler().runDelayed(plugin, (t) -> {
+                        if (!player.isOnline()) return;
+                        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
+                        player.sendActionBar("§a幽匿探测已激活！检测到 " + finalEntityCount + " 个监守者, " + shriekerCount.get() + " 个尖啸体");
+                        if (configManager.getBoolean("debug")) {
+                            plugin.getLogger().fine("ShriekerSense: 范围=" + range + ", 持续时间=" + duration + "刻, 监守者=" + finalEntityCount + ", 尖啸体=" + shriekerCount.get());
+                        }
+                    }, null, 3L);
                 }
             }
         );
@@ -190,43 +168,30 @@ public class ShriekerSense extends CustomEnchantment {
 
                     // 在方块所在区域线程执行清除操作（Folia 要求）
                     plugin.getServer().getRegionScheduler().run(plugin, blockLocation, (task) -> {
-                        // 从配置读取偏移量
                         double offsetX = configManager.getDouble("shrieker_sense.text-display-offset.x");
                         double offsetY = configManager.getDouble("shrieker_sense.text-display-offset.y");
                         double offsetZ = configManager.getDouble("shrieker_sense.text-display-offset.z");
 
-                        // 计算 TextDisplay 的实际位置
+                        // 按位置直接查表移除，避免跨区域遍历所有玩家的 TextDisplay
                         Location expectedDisplayLoc = blockLocation.clone().add(offsetX, offsetY, offsetZ);
-
-                        // 遍历所有玩家的 TextDisplay，查找并移除对应位置的
-                        for (Map.Entry<UUID, List<TextDisplay>> entry : playerTextDisplays.entrySet()) {
-                            List<TextDisplay> displays = entry.getValue();
-                            displays.removeIf(display -> {
-                                if (display != null && !display.isDead()) {
-                                    Location displayLoc = display.getLocation();
-                                    // 检查 TextDisplay 位置是否与预期位置匹配
-                                    if (Math.abs(displayLoc.getX() - expectedDisplayLoc.getX()) < 0.1 &&
-                                        Math.abs(displayLoc.getY() - expectedDisplayLoc.getY()) < 0.1 &&
-                                        Math.abs(displayLoc.getZ() - expectedDisplayLoc.getZ()) < 0.1) {
-                                        display.remove();
-                                        if (configManager.getBoolean("debug")) {
-                                            plugin.getLogger().fine("尖啸体被破坏，已移除对应的 TextDisplay at " + displayLoc);  // ✅ 使用 fine 级别
-                                        }
-                                        return true;
-                                    }
+                        TextDisplay display = textDisplayByLocation.remove(expectedDisplayLoc);
+                        if (display != null && !display.isDead()) {
+                            display.remove();
+                            for (Map.Entry<UUID, List<TextDisplay>> entry : playerTextDisplays.entrySet()) {
+                                List<TextDisplay> list = entry.getValue();
+                                if (list.remove(display) && list.isEmpty()) {
+                                    playerTextDisplays.remove(entry.getKey(), list);
                                 }
-                                return false;
-                            });
+                            }
+                            if (configManager.getBoolean("debug")) {
+                                plugin.getLogger().fine("尖啸体被破坏，已移除对应的 TextDisplay at " + expectedDisplayLoc);
+                            }
                         }
                     });
                 }
             }
         );
     }
-
-    /**
-     * ✅ 修复：使用标准的 Bukkit 事件监听器签名
-     */
 
     private void highlightEntity(Entity entity, int durationTicks) {
         if (entity instanceof org.bukkit.entity.LivingEntity livingEntity) {
@@ -240,45 +205,50 @@ public class ShriekerSense extends CustomEnchantment {
         }
     }
 
-    private int highlightSculkShriekers(org.bukkit.entity.Player player, int range, int durationTicks) {
+    private void highlightSculkShriekers(org.bukkit.entity.Player player, int range, int durationTicks, AtomicInteger count) {
+        var world = player.getWorld();
         Location playerLoc = player.getLocation();
-        int count = 0;
+        int px = playerLoc.getBlockX();
+        int py = playerLoc.getBlockY();
+        int pz = playerLoc.getBlockZ();
+        int minY = Math.max(py - range, world.getMinHeight());
+        int maxY = Math.min(py + range, world.getMaxHeight() - 1);
 
         // 从配置读取 TextDisplay 位置偏移（支持 reload）
         double offsetX = configManager.getDouble("shrieker_sense.text-display-offset.x");
         double offsetY = configManager.getDouble("shrieker_sense.text-display-offset.y");
         double offsetZ = configManager.getDouble("shrieker_sense.text-display-offset.z");
 
-        // 遍历范围内的方块（48格范围）
-        for (int x = -range; x <= range; x++) {
-            for (int y = -range; y <= range; y++) {
-                for (int z = -range; z <= range; z++) {
-                    Location checkLoc = playerLoc.clone().add(x, y, z);
-
-                    // 检查区块是否已加载
-                    if (!player.getWorld().isChunkLoaded(checkLoc.getBlockX() >> 4, checkLoc.getBlockZ() >> 4)) {
-                        continue;
+        // 按 chunk 分组调度到所属 region 扫描，避免玩家线程跨区域读方块
+        for (int cx = (px - range) >> 4; cx <= (px + range) >> 4; cx++) {
+            for (int cz = (pz - range) >> 4; cz <= (pz + range) >> 4; cz++) {
+                final int fcX = cx;
+                final int fcZ = cz;
+                plugin.getServer().getRegionScheduler().run(plugin, world, fcX, fcZ, (task) -> {
+                    int startX = Math.max(fcX << 4, px - range);
+                    int endX = Math.min((fcX << 4) + 15, px + range);
+                    int startZ = Math.max(fcZ << 4, pz - range);
+                    int endZ = Math.min((fcZ << 4) + 15, pz + range);
+                    for (int x = startX; x <= endX; x++) {
+                        for (int y = minY; y <= maxY; y++) {
+                            for (int z = startZ; z <= endZ; z++) {
+                                Block block = world.getBlockAt(x, y, z);
+                                if (block.getType() == Material.SCULK_SHRIEKER) {
+                                    Location loc = block.getLocation().add(offsetX, offsetY, offsetZ);
+                                    createTextDisplay(loc, durationTicks, player.getUniqueId());
+                                    count.incrementAndGet();
+                                }
+                            }
+                        }
                     }
-
-                    Block block = checkLoc.getBlock();
-
-                    // 检查是否是幽匿尖啸体
-                    if (block.getType() == Material.SCULK_SHRIEKER) {
-                        // 在尖啸体所在区域线程中创建 TextDisplay（Folia 要求）
-                        final Location finalLoc = block.getLocation().clone().add(offsetX, offsetY, offsetZ);
-                        plugin.getServer().getRegionScheduler().run(plugin, finalLoc, (task) -> createTextDisplay(finalLoc, durationTicks, player.getUniqueId()));
-                        count++;
-                    }
-                }
+                });
             }
         }
-
-        return count;
     }
 
     private void createTextDisplay(Location location, int durationTicks, UUID playerUUID) {
         try {
-            // 在该位置生成 TextDisplay 实体
+            // 在该位置生成 TextDisplay 实体（已在方块所属 region 线程）
             TextDisplay textDisplay = location.getWorld().spawn(location, TextDisplay.class);
 
             // 设置文本内容（使用 Adventure API 设置颜色）
@@ -286,37 +256,36 @@ public class ShriekerSense extends CustomEnchantment {
 
             // 设置显示属性
             textDisplay.setBillboard(Display.Billboard.CENTER);
-            textDisplay.setDefaultBackground(false); // 禁用默认背景
-            textDisplay.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0)); // 设置完全透明背景
-            textDisplay.setSeeThrough(true); // 透视显示
-            textDisplay.setViewRange(128.0f); // 可见距离
+            textDisplay.setDefaultBackground(false);
+            textDisplay.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
+            textDisplay.setSeeThrough(true);
+            textDisplay.setViewRange(128.0f);
 
             // 设置亮度（最大亮度）
             textDisplay.setBrightness(new Display.Brightness(15, 15));
 
             // 设置大小（通过 transformation scale）- 放大到包裹整个方块
-            // JOML 是 Paper API 的依赖，用于矩阵变换
             textDisplay.setTransformationMatrix(new org.joml.Matrix4f().scale(16f, 16f, 16f));
 
-            // 将该 TextDisplay 添加到玩家列表中
+            // 将该 TextDisplay 添加到玩家列表和位置表中
             playerTextDisplays.computeIfAbsent(playerUUID, k -> new CopyOnWriteArrayList<>()).add(textDisplay);
+            textDisplayByLocation.put(location, textDisplay);
 
-            // 调试信息
             if (configManager.getBoolean("debug")) {
-                plugin.getLogger().fine("TextDisplay 创建成功 at " + location);  // ✅ 使用 fine 级别
+                plugin.getLogger().fine("TextDisplay 创建成功 at " + location);
             }
 
             // 在持续时间后移除 TextDisplay（在实体所在区域线程执行）
             plugin.getServer().getRegionScheduler().runDelayed(plugin, location, (task) -> {
                 if (!textDisplay.isDead()) {
                     textDisplay.remove();
-                    // ✅ 安全地从列表中移除，防止内存泄漏
                     playerTextDisplays.computeIfPresent(playerUUID, (key, list) -> {
                         list.remove(textDisplay);
-                        return list.isEmpty() ? null : list;  // 如果列表为空则移除整个条目
+                        return list.isEmpty() ? null : list;
                     });
+                    textDisplayByLocation.remove(location);
                     if (configManager.getBoolean("debug")) {
-                        plugin.getLogger().fine("TextDisplay 已移除");  // ✅ 使用 fine 级别
+                        plugin.getLogger().fine("TextDisplay 已移除");
                     }
                 }
             }, durationTicks);
@@ -331,24 +300,29 @@ public class ShriekerSense extends CustomEnchantment {
      */
     private void clearPlayerTextDisplays(UUID playerUUID) {
         List<TextDisplay> displays = playerTextDisplays.get(playerUUID);
-        if (displays != null) {
-            // 复制列表以避免并发修改异常
-            List<TextDisplay> displaysCopy = new ArrayList<>(displays);
-            for (TextDisplay display : displaysCopy) {
-                if (display != null && !display.isDead()) {
-                    // 在实体所在区域线程执行移除操作
-                    Location loc = display.getLocation();
-                    plugin.getServer().getRegionScheduler().run(plugin, loc, (task) -> {
-                        if (!display.isDead()) {
-                            display.remove();
-                        }
-                    });
-                }
+        if (displays == null || displays.isEmpty()) return;
+
+        // 复制列表以避免并发修改异常
+        List<TextDisplay> displaysCopy = new ArrayList<>(displays);
+        // 通过位置表找到各 display 的所属 region，避免跨区域读 getLocation()
+        List<Location> toRemove = new ArrayList<>();
+        for (Map.Entry<Location, TextDisplay> entry : textDisplayByLocation.entrySet()) {
+            final Map.Entry<Location, TextDisplay> e = entry;
+            if (displaysCopy.contains(e.getValue())) {
+                toRemove.add(e.getKey());
+                plugin.getServer().getRegionScheduler().run(plugin, e.getKey(), (task) -> {
+                    if (!e.getValue().isDead()) {
+                        e.getValue().remove();
+                    }
+                });
             }
-            displays.clear();
-            if (configManager.getBoolean("debug")) {
-                plugin.getLogger().fine("已清除玩家的 TextDisplay");  // ✅ 使用 fine 级别
-            }
+        }
+        for (Location loc : toRemove) {
+            textDisplayByLocation.remove(loc);
+        }
+        displays.clear();
+        if (configManager.getBoolean("debug")) {
+            plugin.getLogger().fine("已清除玩家的 TextDisplay");
         }
     }
 
@@ -359,7 +333,7 @@ public class ShriekerSense extends CustomEnchantment {
         clearPlayerTextDisplays(playerUUID);
         playerTextDisplays.remove(playerUUID);
         if (configManager.getBoolean("debug")) {
-            plugin.getLogger().fine("玩家 " + playerUUID + " 离线，已清理所有 TextDisplay");  // ✅ 使用 fine 级别
+            plugin.getLogger().fine("玩家 " + playerUUID + " 离线，已清理所有 TextDisplay");
         }
     }
 }

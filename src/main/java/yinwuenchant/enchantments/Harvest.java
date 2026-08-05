@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 丰收附魔 - Harvest Enchantment
@@ -54,6 +55,11 @@ public class Harvest extends CustomEnchantment {
     }
 
     @Override
+    public org.bukkit.enchantments.Enchantment[] getExclusiveEnchantments() {
+        return new org.bukkit.enchantments.Enchantment[] { Enchantment.SILK_TOUCH };
+    }
+
+    @Override
     public Component displayName(int level) {
         return Component.text("丰收");
     }
@@ -63,29 +69,26 @@ public class Harvest extends CustomEnchantment {
         boolean enabled = configManager.isEnchantmentEnabled("harvest");
 
         if (plugin.getConfigManager().getBoolean("debug")) {
-            plugin.getLogger().fine("[丰收] onEnable() 被调用, enabled=" + enabled);  // ✅ 使用 fine 级别
+            plugin.getLogger().fine("[丰收] onEnable() 被调用, enabled=" + enabled);
         }
 
         if (!enabled) {
             return;
         }
 
-        // ✅ 从配置缓存中读取收获范围（性能优化）
+        // 从配置缓存中读取收获范围（性能优化）
         harvestRange = configManager.getInt("harvest.range");
         cooldownTicks = plugin.getConfig().getInt("enchantments.harvest.cooldown-ticks", 60);
 
         if (plugin.getConfigManager().getBoolean("debug")) {
-            plugin.getLogger().fine("[丰收] 收获范围: " + harvestRange + " (实际范围: " + (harvestRange * 2 + 1) + "x" + (harvestRange * 2 + 1) + "x" + (harvestRange * 2 + 1) + ")");  // ✅ 使用 fine 级别
+            plugin.getLogger().fine("[丰收] 收获范围: " + harvestRange + " (实际范围: " + (harvestRange * 2 + 1) + "x" + (harvestRange * 2 + 1) + "x" + (harvestRange * 2 + 1) + ")");
         }
-
-        // ⚠️ 事件订阅注册由 EnchantmentManager.enableAll() 统一调用 registerEventSubscribers()
-        // 此处不再重复注册，避免事件处理器被注册两次
     }
 
     @Override
     public void onDisable() {
         if (plugin.getConfigManager().getBoolean("debug")) {
-            plugin.getLogger().fine("[丰收] 已禁用，清理 " + playerCooldowns.size() + " 个玩家冷却记录");  // ✅ 使用 fine 级别
+            plugin.getLogger().fine("[丰收] 已禁用，清理 " + playerCooldowns.size() + " 个玩家冷却记录");
         }
         playerCooldowns.clear();
     }
@@ -116,15 +119,18 @@ public class Harvest extends CustomEnchantment {
                     return;
                 }
 
-                // ✅ 检查是否与精准采集互斥
+                // 检查是否与精准采集互斥
                 if (item.getEnchantmentLevel(Enchantment.SILK_TOUCH) > 0) {
                     return;
                 }
 
                 // 检查冷却时间
                 if (isOnCooldown(player)) {
+                    Long lastUse = playerCooldowns.get(player.getUniqueId());
+                    long left = (lastUse + cooldownTicks * 50L - System.currentTimeMillis()) / 1000;
+                    player.sendActionBar("§c丰收冷却中… " + Math.max(left, 1) + "s");
                     if (plugin.getConfigManager().getBoolean("debug")) {
-                        plugin.getLogger().fine("[丰收调试] 玩家 " + player.getName() + " 正在冷却中，跳过触发");  // ✅ 使用 fine 级别
+                        plugin.getLogger().fine("[丰收调试] 玩家 " + player.getName() + " 正在冷却中，跳过触发");
                     }
                     return;
                 }
@@ -135,16 +141,9 @@ public class Harvest extends CustomEnchantment {
                     return;
                 }
 
-                // 检查目标方块是否是可收获的作物
-                if (!isHarvestableCrop(targetBlock)) {
-                    return;
-                }
-
-                // 执行收获逻辑
-                harvestCrops(player, targetBlock);
-
-                // 设置冷却时间
-                setCooldown(player);
+                // Folia：时运在玩家线程预计算，方块检查与收获在方块所属 region 执行
+                int fortuneLevel = getFortuneLevel(player);
+                harvestCrops(player, targetBlock.getLocation(), fortuneLevel);
             }
         );
     }
@@ -184,51 +183,50 @@ public class Harvest extends CustomEnchantment {
 
     /**
      * 收获作物（可配置范围）
+     * Folia：先确认目标作物，再按方块调度到各自 region，避免跨区域读写
      */
-    private void harvestCrops(Player player, Block centerBlock) {
-        World world = centerBlock.getWorld();
-        Location center = centerBlock.getLocation();
+    private void harvestCrops(Player player, Location center, int fortuneLevel) {
+        plugin.getServer().getRegionScheduler().run(plugin, center, (task) -> {
+            Block centerBlock = center.getBlock();
+            if (!isHarvestableCrop(centerBlock)) return;
 
-        int harvestedCount = 0;
+            // 冷却回到玩家线程设置
+            player.getScheduler().run(plugin, (t) -> setCooldown(player), null);
 
-        // ✅ 使用配置中的范围值遍历
-        for (int x = -harvestRange; x <= harvestRange; x++) {
-            for (int y = -harvestRange; y <= harvestRange; y++) {
-                for (int z = -harvestRange; z <= harvestRange; z++) {
-                    Block block = world.getBlockAt(
-                        center.getBlockX() + x,
-                        center.getBlockY() + y,
-                        center.getBlockZ() + z
-                    );
-
-                    if (isHarvestableCrop(block)) {
-                        // 收获单个作物
-                        if (harvestSingleCrop(player, block)) {
-                            harvestedCount++;
-                        }
+            AtomicInteger harvestedCount = new AtomicInteger();
+            for (int x = -harvestRange; x <= harvestRange; x++) {
+                for (int y = -harvestRange; y <= harvestRange; y++) {
+                    for (int z = -harvestRange; z <= harvestRange; z++) {
+                        Location loc = center.clone().add(x, y, z);
+                        plugin.getServer().getRegionScheduler().run(plugin, loc, (t2) -> {
+                            Block block = loc.getBlock();
+                            if (isHarvestableCrop(block) && harvestSingleCrop(block, fortuneLevel)) {
+                                harvestedCount.incrementAndGet();
+                            }
+                        });
                     }
                 }
             }
-        }
 
-        // 播放音效（村民高兴的声音）
-        if (harvestedCount > 0) {
-            world.playSound(center, Sound.ENTITY_VILLAGER_YES, 1.0f, 1.0f);
-
-            if (plugin.getConfigManager().getBoolean("debug")) {
-                plugin.getLogger().fine("[丰收] 玩家 " + player.getName() + " 收获了 " + harvestedCount + " 个作物");  // ✅ 使用 fine 级别
-
-                // ✅ 额外调试：统计土豆总数
-                int fortuneLevel = getFortuneLevel(player);
-                plugin.getLogger().fine("[丰收调试] 总计收获: " + harvestedCount + " 格 | 时运等级: " + fortuneLevel);  // ✅ 使用 fine 级别
-            }
-        }
+            // 延迟两拍统计后再回玩家线程播音效/日志
+            player.getScheduler().runDelayed(plugin, (t3) -> {
+                if (player.isOnline()) {
+                    int count = harvestedCount.get();
+                    if (count > 0) {
+                        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1.0f, 1.0f);
+                        if (plugin.getConfigManager().getBoolean("debug")) {
+                            plugin.getLogger().fine("[丰收] 玩家 " + player.getName() + " 收获了 " + count + " 个作物");
+                        }
+                    }
+                }
+            }, null, 2L);
+        });
     }
 
     /**
      * 收获单个作物
      */
-    private boolean harvestSingleCrop(Player player, Block cropBlock) {
+    private boolean harvestSingleCrop(Block cropBlock, int fortuneLevel) {
         Material cropType = cropBlock.getType();
         BlockData blockData = cropBlock.getBlockData();
 
@@ -236,19 +234,16 @@ public class Harvest extends CustomEnchantment {
             return false;
         }
 
-        // ✅ 获取时运等级（用于调试）
-        int fortuneLevel = getFortuneLevel(player);
-
         // 获取作物的掉落物品
-        List<ItemStack> drops = getCropDrops(cropType, player);
+        List<ItemStack> drops = getCropDrops(cropType, fortuneLevel);
 
-        // ✅ 调试日志：记录每次收获的详细信息
+        // 调试日志：记录每次收获的详细信息
         if (plugin.getConfigManager().getBoolean("debug") && cropType == Material.POTATOES) {
             int totalPotatoes = drops.stream()
                 .filter(item -> item.getType() == Material.POTATO)
                 .mapToInt(ItemStack::getAmount)
                 .sum();
-            plugin.getLogger().fine("[丰收调试] 收获土豆 | 时运等级: " + fortuneLevel + " | 掉落数量: " + totalPotatoes);  // ✅ 使用 fine 级别
+            plugin.getLogger().fine("[丰收调试] 收获土豆 | 时运等级: " + fortuneLevel + " | 掉落数量: " + totalPotatoes);
         }
 
         // 在作物位置掉落物品
@@ -258,7 +253,7 @@ public class Harvest extends CustomEnchantment {
             }
         }
 
-        // ✅ 浆果丛不需要重新补种，其他作物需要重置年龄
+        // 浆果丛不需要重新补种，其他作物需要重置年龄
         if (cropType != Material.SWEET_BERRY_BUSH) {
             ageable.setAge(0);
             cropBlock.setBlockData(ageable);
@@ -270,11 +265,8 @@ public class Harvest extends CustomEnchantment {
     /**
      * 获取作物掉落物品（支持时运）
      */
-    private List<ItemStack> getCropDrops(Material cropType, Player player) {
+    private List<ItemStack> getCropDrops(Material cropType, int fortuneLevel) {
         List<ItemStack> drops = new ArrayList<>();
-
-        // 获取工具上的时运等级
-        int fortuneLevel = getFortuneLevel(player);
 
         // 根据不同作物类型计算掉落
         switch (cropType) {
@@ -292,15 +284,11 @@ public class Harvest extends CustomEnchantment {
                 break;
 
             case POTATOES:
-                // ✅ 土豆：匹配 Minecraft Java 版原版掉落机制
-                // 根据原版数据：无时运平均 3.71，时运 III 平均 5.43
-
-
+                // 土豆：匹配 Minecraft Java 版原版掉落机制
                 // 基础掉落 2-5 个（均匀分布）
                 int potatoes = 2 + ThreadLocalRandom.current().nextInt(4);
 
                 // 时运效果：每级时运有概率额外增加掉落
-                // 时运 I: +0-1 (50%概率), 时运 II: +0-2, 时运 III: +0-3
                 if (fortuneLevel > 0) {
                     potatoes += ThreadLocalRandom.current().nextInt(fortuneLevel + 1);
                 }

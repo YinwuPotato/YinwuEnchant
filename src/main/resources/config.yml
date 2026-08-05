@@ -215,53 +215,53 @@ acquisition:
     enabled: true
     mob-drops:
       - entity: PHANTOM
-        chance: 0.05
+        chance: 0.10
         level-min: 1
         level-max: 1
   master_of_beef_slicing:
     enabled: true
     mob-drops:
       - entity: PILLAGER
-        chance: 0.03
+        chance: 0.05
         level-min: 1
         level-max: 3
       - entity: VINDICATOR
-        chance: 0.03
+        chance: 0.05
         level-min: 1
         level-max: 3
       - entity: EVOKER
-        chance: 0.03
+        chance: 0.05
         level-min: 1
         level-max: 3
   cats_paw:
     enabled: true
     mob-drops:
       - entity: PIGLIN
-        chance: 0.02
+        chance: 0.10
         level-min: 1
         level-max: 1
       - entity: PIGLIN_BRUTE
-        chance: 0.02
+        chance: 0.10
         level-min: 1
         level-max: 1
   nasus:
     enabled: true
     mob-drops:
       - entity: SHULKER
-        chance: 0.015
+        chance: 0.10
         level-min: 1
         level-max: 1
   harvest:
     enabled: true
     fishing:
-      chance: 0.02
+      chance: 1.0
       level-min: 1
       level-max: 1
   smelt:
     enabled: true
     mob-drops:
       - entity: MAGMA_CUBE
-        chance: 0.01
+        chance: 0.10
         level-min: 1
         level-max: 1
   airbag:
@@ -275,44 +275,53 @@ acquisition:
     enabled: true
     mob-drops:
       - entity: WARDEN
-        chance: 1.0
+        chance: 0.10
         level-min: 1
         level-max: 1
   lava_walker:
     enabled: true
     mob-drops:
       - entity: STRIDER
-        chance: 0.1
+        chance: 0.05
         level-min: 1
         level-max: 2
   emerald_till:
     enabled: true
     mob-drops:
       - entity: WANDERING_TRADER
-        chance: 0.3
+        chance: 0.10
         level-min: 1
         level-max: 1
   vampire_curse:
     enabled: true
     mob-drops:
       - entity: ZOGLIN
-        chance: 0.1
+        chance: 0.30
         level-min: 1
         level-max: 1
   insomnia:
     enabled: true
     mob-drops:
       - entity: COPPER_GOLEM
-        chance: 0.1
+        chance: 0.30
         level-min: 1
         level-max: 1
   soulbound:
     enabled: true
     mob-drops:
       - entity: ILLUSIONER
-        chance: 0.1
+        chance: 0.02
         level-min: 1
         level-max: 1
+
+# 附魔台模拟 — 自定义附魔进入附魔台
+enchanting-table:
+  enabled: true
+  # 每次附魔出现自定义附魔的概率 (0-1)
+  chance: 0.02
+  # 出现的自定义附魔数量范围
+  count-min: 1
+  count-max: 1
 
 # 调试模式
 debug: false

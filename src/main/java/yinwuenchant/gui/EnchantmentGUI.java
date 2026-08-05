@@ -28,17 +28,23 @@ public class EnchantmentGUI {
     private static final int SIZE = 54;
 
     private static final Map<String, Integer> SLOTS = Map.ofEntries(
-        Map.entry("clearsight", 0), Map.entry("sonic_boom", 1),
-        Map.entry("safefall", 2), Map.entry("cats_paw", 3),
-        Map.entry("master_of_beef_slicing", 4), Map.entry("resonate", 5),
-        Map.entry("undermine", 6), Map.entry("shrieker_sense", 7),
-        Map.entry("soulbound", 8), Map.entry("nasus", 9),
-        Map.entry("phantom", 10), Map.entry("airbag", 11),
-        Map.entry("darkspeed", 12), Map.entry("smelt", 13),
-        Map.entry("bless", 14), Map.entry("harvest", 15),
-        Map.entry("vampire_curse", 16), Map.entry("insomnia", 17),
-        Map.entry("lava_walker", 18), Map.entry("emerald_till", 19),
-        Map.entry("step_up", 20)
+        // 第一行：头盔
+        Map.entry("clearsight", 0), Map.entry("nasus", 1),
+        Map.entry("insomnia", 2), Map.entry("vampire_curse", 3),
+        // 第二行：胸甲/鞘翅
+        Map.entry("sonic_boom", 9), Map.entry("bless", 10),
+        Map.entry("phantom", 11), Map.entry("airbag", 12),
+        // 第三行：护腿
+        Map.entry("safefall", 18),
+        // 第四行：鞋子
+        Map.entry("darkspeed", 27), Map.entry("cats_paw", 28),
+        Map.entry("lava_walker", 29), Map.entry("step_up", 30),
+        // 第五行：武器
+        Map.entry("master_of_beef_slicing", 36), Map.entry("resonate", 37),
+        // 第六行：工具
+        Map.entry("undermine", 45), Map.entry("harvest", 46),
+        Map.entry("smelt", 47), Map.entry("emerald_till", 48),
+        Map.entry("shrieker_sense", 49), Map.entry("soulbound", 50)
     );
 
     public EnchantmentGUI(YinwuEnchantments plugin, EnchantmentManager em, ConfigManager cm) {
@@ -147,6 +153,7 @@ public class EnchantmentGUI {
             if (m == null) return;
             boolean en = configManager.isEnchantmentEnabled(id);
             m.setDisplayName((en ? ChatColor.GREEN : ChatColor.RED) + chineseName(id));
+            m.setLore(buildLore(id, ench));
             m.addEnchant(Enchantment.UNBREAKING, 1, true);
             m.addItemFlags(ItemFlag.HIDE_ENCHANTS);
             ni.setItemMeta(m);

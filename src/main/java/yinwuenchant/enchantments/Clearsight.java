@@ -3,19 +3,13 @@ package yinwuenchant.enchantments;
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.manager.ConfigManager;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffectType;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 public class Clearsight extends CustomEnchantment {
     private final ConfigManager configManager;
-    private final Set<UUID> activePlayers = ConcurrentHashMap.newKeySet();
     private ScheduledTask task;
 
     public Clearsight(YinwuEnchantments plugin) {
@@ -39,10 +33,11 @@ public class Clearsight extends CustomEnchantment {
 
         int interval = configManager.getInt("clearsight.check-interval");
         task = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (t) -> {
-            for (UUID uuid : activePlayers) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player == null || !player.isOnline()) { activePlayers.remove(uuid); continue; }
+            // 实时检测所有在线玩家头盔，避免缓存失效（右键穿装备不触发 onEquipmentChange）
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
                 player.getScheduler().run(plugin, (task2) -> {
+                    var helmet = player.getInventory().getHelmet();
+                    if (!hasEnchantment(helmet)) return;
                     if (player.hasPotionEffect(PotionEffectType.DARKNESS)) {
                         player.removePotionEffect(PotionEffectType.DARKNESS);
                     }
@@ -57,16 +52,5 @@ public class Clearsight extends CustomEnchantment {
     @Override
     public void onDisable() {
         if (task != null) task.cancel();
-        activePlayers.clear();
-    }
-
-    @Override
-    public void onEquipmentChange(Player player) {
-        var helmet = player.getInventory().getHelmet();
-        if (hasEnchantment(helmet)) {
-            activePlayers.add(player.getUniqueId());
-        } else {
-            activePlayers.remove(player.getUniqueId());
-        }
     }
 }

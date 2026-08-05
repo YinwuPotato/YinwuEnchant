@@ -3,7 +3,6 @@ package yinwuenchant.enchantments;
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.manager.ConfigManager;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -17,8 +16,6 @@ public class Darkspeed extends CustomEnchantment {
     private final ConfigManager configManager;
     private ScheduledTask particleTask;
     private ScheduledTask soundTask;
-    private final java.util.Map<java.util.UUID, Integer> playerSpeedLevels = new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.util.Set<java.util.UUID> activePlayers = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public Darkspeed(YinwuEnchantments plugin) {
         super(plugin, "darkspeed", "黑暗行者", 3, new Material[] {
@@ -41,14 +38,15 @@ public class Darkspeed extends CustomEnchantment {
         int particleInterval = configManager.getInt("darkspeed.particle-interval");
         int soundInterval = configManager.getInt("darkspeed.sound-interval");
 
+        // 实时检测所有在线玩家的靴子，避免缓存失效（右键穿装备不触发 onEquipmentChange）
         particleTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (t) -> {
-            for (java.util.UUID uuid : activePlayers) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player == null || !player.isOnline()) { activePlayers.remove(uuid); continue; }
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
                 player.getScheduler().run(plugin, (task) -> {
+                    var boots = player.getInventory().getBoots();
+                    if (!hasEnchantment(boots)) return;
+                    int level = getEnchantmentLevel(boots);
                     if (isInDarkness(player)) {
-                        // 缓存由 onEquipmentChange 维护，不读PDC
-                        int level = playerSpeedLevels.getOrDefault(player.getUniqueId(), 1);
+                        applySpeed(player, level);
                         spawnParticles(player, level);
                     }
                 }, null);
@@ -56,14 +54,12 @@ public class Darkspeed extends CustomEnchantment {
         }, 1L, particleInterval);
 
         soundTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (t) -> {
-            for (java.util.UUID uuid : activePlayers) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player == null || !player.isOnline()) { activePlayers.remove(uuid); continue; }
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
                 player.getScheduler().run(plugin, (task) -> {
-                    if (isInDarkness(player)) {
-                        int level = playerSpeedLevels.getOrDefault(player.getUniqueId(), 1);
-                        playSound(player, level);
-                    }
+                    var boots = player.getInventory().getBoots();
+                    if (!hasEnchantment(boots)) return;
+                    int level = getEnchantmentLevel(boots);
+                    if (isInDarkness(player)) playSound(player, level);
                 }, null);
             }
         }, 1L, soundInterval);
@@ -73,50 +69,17 @@ public class Darkspeed extends CustomEnchantment {
     public void onDisable() {
         if (particleTask != null) particleTask.cancel();
         if (soundTask != null) soundTask.cancel();
-        activePlayers.clear();
-        playerSpeedLevels.clear();
     }
 
-    @Override
-    public void onEquipmentChange(Player player) {
-        var boots = player.getInventory().getBoots();
-        if (hasEnchantment(boots)) {
-            int level = getEnchantmentLevel(boots);
-            activePlayers.add(player.getUniqueId());
-            playerSpeedLevels.put(player.getUniqueId(), level);
-        } else {
-            activePlayers.remove(player.getUniqueId());
-            playerSpeedLevels.remove(player.getUniqueId());
-        }
-    }
-
-    public void cleanupPlayerCache(java.util.UUID playerId) {
-        activePlayers.remove(playerId);
-        playerSpeedLevels.remove(playerId);
-    }
-
-    @Override
-    public void onPlayerMove(org.bukkit.entity.Player player) {
-        if (!configManager.isEnchantmentEnabled("darkspeed")) return;
-        if (player.isDead() || !player.isOnline()) return;
-
-        // 只查缓存，不读PDC
-        if (!activePlayers.contains(player.getUniqueId())) return;
-
-        if (isInDarkness(player)) {
-            int level = playerSpeedLevels.getOrDefault(player.getUniqueId(), 1);
-            Integer cachedLevel = playerSpeedLevels.get(player.getUniqueId());
-            if (cachedLevel == null || cachedLevel != level) {
-                double speedPerLevel = configManager.getDouble("darkspeed.speed-per-level");
-                double speedAmount = speedPerLevel * level;
-                player.addPotionEffect(new PotionEffect(
-                    PotionEffectType.SPEED, 100,
-                    (int) Math.min(speedAmount * 10, 4),
-                    true, false, false
-                ));
-                playerSpeedLevels.put(player.getUniqueId(), level);
-            }
-        }
+    private void applySpeed(Player player, int level) {
+        PotionEffect existing = player.getPotionEffect(PotionEffectType.SPEED);
+        if (existing != null && existing.getDuration() > 40) return;
+        double speedPerLevel = configManager.getDouble("darkspeed.speed-per-level");
+        player.addPotionEffect(new PotionEffect(
+            PotionEffectType.SPEED, 100,
+            (int) Math.min(speedPerLevel * level * 10, 4),
+            true, false, false
+        ));
     }
 
     private boolean isInDarkness(Player player) {

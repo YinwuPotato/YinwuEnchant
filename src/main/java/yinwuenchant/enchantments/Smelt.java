@@ -3,19 +3,21 @@ package yinwuenchant.enchantments;
 import yinwuenchant.YinwuEnchantments;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
-import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.inventory.ItemStack;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 熔化 —— 自动熔炼挖掘的方块
@@ -29,6 +31,10 @@ import java.util.Map;
 public class Smelt extends CustomEnchantment {
 
     private final YinwuEnchantments plugin;
+
+    /** 主手带熔化附魔（且无精准采集）的玩家缓存（玩家线程刷新，方块事件线程读取） */
+    private final Set<UUID> smeltPlayers = ConcurrentHashMap.newKeySet();
+    private ScheduledTask refreshTask;
 
     // 熔炼映射表：原料 → 熔炼产物
     private static final Map<Material, ItemStack> SMELTING_MAP_INNER = new HashMap<>();
@@ -181,25 +187,39 @@ public class Smelt extends CustomEnchantment {
     }
 
     @Override
+    public org.bukkit.enchantments.Enchantment[] getExclusiveEnchantments() {
+        return new org.bukkit.enchantments.Enchantment[] { Enchantment.SILK_TOUCH };
+    }
+
+    @Override
     public Component displayName(int level) {
         return Component.text("熔化");
     }
 
     @Override
     public void onEnable() {
-        if (!plugin.getConfigManager().isEnchantmentEnabled("smelt")) {
-            return;
-        }
-        if (plugin.getConfigManager().getBoolean("debug")) {
-            plugin.getLogger().fine("[熔化] 已启用");
-        }
+        if (!plugin.getConfigManager().isEnchantmentEnabled("smelt")) return;
+        // 实时刷新主手，避免跨区域读背包（BlockDropItemEvent 在方块 region 触发）
+        refreshTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (t) -> {
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                player.getScheduler().run(plugin, (task) -> {
+                    var tool = player.getInventory().getItemInMainHand();
+                    if (tool != null && !tool.getType().isAir()
+                            && hasEnchantment(tool)
+                            && !tool.containsEnchantment(Enchantment.SILK_TOUCH)) {
+                        smeltPlayers.add(player.getUniqueId());
+                    } else {
+                        smeltPlayers.remove(player.getUniqueId());
+                    }
+                }, null);
+            }
+        }, 1L, 5L);
     }
 
     @Override
     public void onDisable() {
-        if (plugin.getConfigManager().getBoolean("debug")) {
-            plugin.getLogger().fine("[熔化] 已禁用");
-        }
+        if (refreshTask != null) refreshTask.cancel();
+        smeltPlayers.clear();
     }
 
     @Override
@@ -221,38 +241,29 @@ public class Smelt extends CustomEnchantment {
         List<Item> items = event.getItems();
         if (items.isEmpty()) return;
 
-        // 第一步：切换到玩家区域线程读取背包
-        player.getScheduler().run(plugin, task -> {
-            ItemStack tool = player.getInventory().getItemInMainHand();
-            if (tool == null || tool.getType().isAir()) return;
-            if (!hasEnchantment(tool)) return;
-            // 与精准采集互斥
-            if (tool.containsEnchantment(Enchantment.SILK_TOUCH)) return;
+        // 只读缓存，不跨区域读主手
+        if (!smeltPlayers.contains(player.getUniqueId())) return;
 
-            // 第二步：切换回方块区域线程处理掉落物
-            plugin.getServer().getRegionScheduler().run(plugin, event.getBlock().getLocation(), t2 -> {
-                boolean smelted = false;
-                Iterator<Item> it = items.iterator();
-                while (it.hasNext()) {
-                    Item entityItem = it.next();
-                    ItemStack stack = entityItem.getItemStack();
-                    if (stack == null || stack.getType().isAir()) continue;
+        boolean smelted = false;
+        Iterator<Item> it = items.iterator();
+        while (it.hasNext()) {
+            Item entityItem = it.next();
+            ItemStack stack = entityItem.getItemStack();
+            if (stack == null || stack.getType().isAir()) continue;
 
-                    ItemStack smeltedResult = getSmeltedResult(stack);
-                    if (smeltedResult != null) {
-                        it.remove();
-                        smeltedResult.setAmount(stack.getAmount());
-                        player.getWorld().dropItemNaturally(
-                            event.getBlock().getLocation().add(0.5, 0.5, 0.5), smeltedResult);
-                        smelted = true;
-                    }
-                }
+            ItemStack smeltedResult = getSmeltedResult(stack);
+            if (smeltedResult != null) {
+                it.remove();
+                smeltedResult.setAmount(stack.getAmount());
+                event.getBlock().getWorld().dropItemNaturally(
+                    event.getBlock().getLocation().add(0.5, 0.5, 0.5), smeltedResult);
+                smelted = true;
+            }
+        }
 
-                if (smelted && plugin.getConfigManager().getBoolean("debug")) {
-                    plugin.getLogger().fine("[熔化] 熔炼了 " + event.getBlock().getType().name());
-                }
-            });
-        }, null);
+        if (smelted && plugin.getConfigManager().getBoolean("debug")) {
+            plugin.getLogger().fine("[熔化] 熔炼了 " + event.getBlock().getType().name());
+        }
     }
 
     /**

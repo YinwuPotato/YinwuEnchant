@@ -17,6 +17,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.util.Vector;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -161,44 +162,49 @@ public class SonicBoom extends CustomEnchantment {
             player.getWorld().spawnParticle(Particle.SONIC_BOOM, point, 1, 0, 0, 0, 0);
         }
 
-        // 伤害判定
+        // 伤害判定：以玩家视线为轴、半径 1.2、长度 range 的圆柱体（原版监守者音波为圆柱判定，范围更大）
         CustomEnchantment resonate = plugin.getEnchantmentManager().getEnchantment("resonate");
         Set<UUID> damaged = new HashSet<>();
-        for (double d = 1; d < range; d += 1) {
-            Location point = start.clone().add(dir.clone().multiply(d));
-            for (Entity entity : player.getWorld().getNearbyEntities(point, 0.8, 0.8, 0.8)) {
-                if (entity instanceof LivingEntity living && !entity.equals(player)) {
-                    if (!damaged.add(entity.getUniqueId())) continue;
-                    if (immuneMobs.contains(entity.getType().name())) continue;
+        double radius = 1.2;
+        Collection<Entity> nearby = player.getWorld().getNearbyEntities(start, range, 3.0, range);
+        for (Entity entity : nearby) {
+            if (!(entity instanceof LivingEntity living) || entity.equals(player)) continue;
+            if (!damaged.add(entity.getUniqueId())) continue;
+            if (immuneMobs.contains(entity.getType().name())) continue;
 
-                    // 在目标实体线程检查共振盾牌反弹
-                    entity.getScheduler().run(plugin, t -> {
-                        boolean reflected = false;
-                        if (living instanceof Player victim && victim.isBlocking()) {
-                            ItemStack shield = victim.getActiveItem();
-                            if (shield != null && shield.getType() == Material.SHIELD
-                                    && resonate != null && resonate.hasEnchantment(shield)) {
-                                reflected = true;
-                                // 反弹回攻击者
-                                player.getScheduler().run(plugin, t2 -> {
-                                    player.damage(damage, DamageSource.builder(DamageType.SONIC_BOOM).build());
-                                    Vector kb = dir.clone().setY(0).normalize().multiply(-7);
-                                    kb.setY(0.5);
-                                    player.setVelocity(kb);
-                                    player.getWorld().playSound(player.getLocation(),
-                                        Sound.ENTITY_WARDEN_SONIC_BOOM, 2.0f, 1.5f);
-                                }, null);
-                            }
-                        }
-                        if (!reflected) {
-                            living.damage(damage, DamageSource.builder(DamageType.SONIC_BOOM).build());
-                            Vector kb = dir.clone().setY(0).normalize().multiply(7);
+            // 圆柱体判定：实体到射线轴线的垂直距离 ≤ 半径，且在射程内
+            Location entLoc = entity.getLocation().clone().subtract(start.toVector());
+            double along = entLoc.getX() * dir.getX() + entLoc.getY() * dir.getY() + entLoc.getZ() * dir.getZ();
+            if (along < 1 || along > range) continue;
+            Vector perpendicular = entLoc.toVector().subtract(dir.clone().multiply(along));
+            if (perpendicular.length() > radius) continue;
+
+            // 在目标实体线程检查共振盾牌反弹
+            entity.getScheduler().run(plugin, t -> {
+                boolean reflected = false;
+                if (living instanceof Player victim && victim.isBlocking()) {
+                    ItemStack shield = victim.getActiveItem();
+                    if (shield != null && shield.getType() == Material.SHIELD
+                            && resonate != null && resonate.hasEnchantment(shield)) {
+                        reflected = true;
+                        // 反弹回攻击者
+                        player.getScheduler().run(plugin, t2 -> {
+                            player.damage(damage, DamageSource.builder(DamageType.SONIC_BOOM).build());
+                            Vector kb = dir.clone().setY(0).normalize().multiply(-7);
                             kb.setY(0.5);
-                            living.setVelocity(kb);
-                        }
-                    }, null);
+                            player.setVelocity(kb);
+                            player.getWorld().playSound(player.getLocation(),
+                                Sound.ENTITY_WARDEN_SONIC_BOOM, 2.0f, 1.5f);
+                        }, null);
+                    }
                 }
-            }
+                if (!reflected) {
+                    living.damage(damage, DamageSource.builder(DamageType.SONIC_BOOM).build());
+                    Vector kb = dir.clone().setY(0).normalize().multiply(7);
+                    kb.setY(0.5);
+                    living.setVelocity(kb);
+                }
+            }, null);
         }
     }
 

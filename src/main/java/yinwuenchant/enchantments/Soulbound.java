@@ -3,16 +3,18 @@ package yinwuenchant.enchantments;
 import yinwuenchant.YinwuEnchantments;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.Set;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 灵魂绑定 —— 死亡时保留附魔物品，不掉落不丢失
@@ -24,6 +26,9 @@ import java.util.ListIterator;
 public class Soulbound extends CustomEnchantment {
 
     private final YinwuEnchantments plugin;
+
+    /** 死亡时暂存被保护物品，重生时归还（玩家UUID → 物品列表） */
+    private final Map<UUID, List<ItemStack>> pendingRestores = new ConcurrentHashMap<>();
 
     public Soulbound(YinwuEnchantments plugin) {
         super(plugin, "soulbound", "灵魂绑定", 1, new Material[]{
@@ -92,6 +97,16 @@ public class Soulbound extends CustomEnchantment {
             PlayerDeathEvent.class,
             this::onPlayerDeath
         );
+
+        // 重生归还 + 登入兜底（死亡后离线/重进场景）
+        plugin.getEnchantmentManager().subscribeEvent(
+            PlayerRespawnEvent.class,
+            event -> restoreItems(((PlayerRespawnEvent) event).getPlayer())
+        );
+        plugin.getEnchantmentManager().subscribeEvent(
+            PlayerJoinEvent.class,
+            event -> restoreItems(((PlayerJoinEvent) event).getPlayer())
+        );
     }
 
     /**
@@ -120,11 +135,43 @@ public class Soulbound extends CustomEnchantment {
             }
         }
 
-        // 如果成功保护了物品，通知玩家
+        // 如果成功保护了物品，暂存并在重生时归还
         if (!protectedItems.isEmpty()) {
-            // 从 getDrops() 移除后，物品会自动保留在玩家背包中
+            pendingRestores.put(player.getUniqueId(), protectedItems);
+
+            // 主路径：死亡清空背包后延迟几刻直接把物品放回背包（不依赖重生事件）
+            // 玩家离线时任务不执行，由登入兜底 restoreItems 归还
+            player.getScheduler().runDelayed(plugin, (task) -> {
+                if (player.isOnline()) {
+                    List<ItemStack> items = pendingRestores.remove(player.getUniqueId());
+                    if (items != null && !items.isEmpty()) {
+                        giveBack(player, items);
+                    }
+                }
+            }, null, 5L);
+
             player.sendMessage("§d✦ §5灵魂绑定 §d保护了 §f" + protectedItems.size()
-                + " §d件物品免于掉落！");
+                + " §d件物品，重生后归还！");
         }
+    }
+
+    /**
+     * 归还被保护的物品（重生 / 登入兜底，幂等）
+     */
+    private void restoreItems(Player player) {
+        List<ItemStack> items = pendingRestores.remove(player.getUniqueId());
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        giveBack(player, items);
+    }
+
+    private void giveBack(Player player, List<ItemStack> items) {
+        for (ItemStack item : items) {
+            // 背包已满的部分掉落在重生点
+            player.getInventory().addItem(item).values().forEach(drop ->
+                player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        }
+        player.sendMessage("§d✦ §5灵魂绑定 §d已归还 §f" + items.size() + " §d件物品！");
     }
 }

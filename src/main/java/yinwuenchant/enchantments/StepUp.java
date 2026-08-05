@@ -69,18 +69,6 @@ public class StepUp extends CustomEnchantment {
     }
 
     @Override
-    public void onEquipmentChange(Player player) {
-        var boots = player.getInventory().getBoots();
-        if (hasEnchantment(boots)) {
-            activePlayers.add(player.getUniqueId());
-            int level = getEnchantmentLevel(boots);
-            applyStepHeight(player, level);
-        } else if (activePlayers.remove(player.getUniqueId())) {
-            resetStepHeight(player.getUniqueId(), player);
-        }
-    }
-
-    @Override
     public void onDisable() {
         if (periodicTask != null && !periodicTask.isCancelled()) {
             periodicTask.cancel();
@@ -88,28 +76,18 @@ public class StepUp extends CustomEnchantment {
         for (UUID uuid : activePlayers) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null && player.isOnline()) {
-                UUID id = uuid;
-                player.getScheduler().run(plugin, t -> resetStepHeight(id, player), null);
+                player.getScheduler().run(plugin, t -> resetStepHeight(player), null);
             }
         }
         activePlayers.clear();
     }
 
     private void refreshStationary() {
-        for (UUID uuid : activePlayers) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null || !player.isOnline()) {
-                activePlayers.remove(uuid);
-                continue;
-            }
+        // 实时读所有在线玩家靴子，站定时保底维持步高
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
             player.getScheduler().run(plugin, task -> {
-                if (player.isDead()) {
-                    resetStepHeight(uuid, player);
-                    activePlayers.remove(uuid);
-                    return;
-                }
-                // 缓存由 onEquipmentChange 维护，保底维持步高
-                applyStepHeight(player, 1);
+                if (player.isDead()) return;
+                syncBoots(player);
             }, null);
         }
     }
@@ -118,10 +96,17 @@ public class StepUp extends CustomEnchantment {
         Player player = event.getPlayer();
         if (!configManager.isEnchantmentEnabled("step_up")) return;
         if (player.isDead()) return;
+        syncBoots(player);
+    }
 
-        // 只查缓存，不读PDC
-        if (!activePlayers.contains(player.getUniqueId())) return;
-        // 步高已在 onEquipmentChange 时设置，无需重复
+    private void syncBoots(Player player) {
+        var boots = player.getInventory().getBoots();
+        if (hasEnchantment(boots)) {
+            activePlayers.add(player.getUniqueId());
+            applyStepHeight(player, getEnchantmentLevel(boots));
+        } else if (activePlayers.remove(player.getUniqueId())) {
+            resetStepHeight(player);
+        }
     }
 
     private void applyStepHeight(Player player, int level) {
@@ -132,25 +117,11 @@ public class StepUp extends CustomEnchantment {
         }
     }
 
-    private void resetStepHeight(UUID uuid, Player player) {
+    private void resetStepHeight(Player player) {
         if (player == null || !player.isOnline()) return;
         var attr = player.getAttribute(Attribute.STEP_HEIGHT);
         if (attr != null) {
             attr.setBaseValue(DEFAULT_STEP);
         }
-    }
-
-    public void cleanup() {
-        if (periodicTask != null && !periodicTask.isCancelled()) {
-            periodicTask.cancel();
-        }
-        for (UUID uuid : activePlayers) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                UUID id = uuid;
-                player.getScheduler().run(plugin, t -> resetStepHeight(id, player), null);
-            }
-        }
-        activePlayers.clear();
     }
 }

@@ -32,7 +32,7 @@ public final class YinwuEnchantments extends YinwuPlugin {
         commandHandler = new CommandHandler(this, enchantmentManager, acquisitionManager, configManager);
         eventListener = new EventListener(this, enchantmentManager);
 
-        // 注册命令
+        // 注册命令（Bukkit 插件用 getCommand）
         getCommand("ye").setExecutor(commandHandler);
         getCommand("ye").setTabCompleter(commandHandler);
 

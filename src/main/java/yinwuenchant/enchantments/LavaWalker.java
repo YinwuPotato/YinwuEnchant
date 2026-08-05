@@ -2,7 +2,6 @@ package yinwuenchant.enchantments;
 
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.manager.ConfigManager;
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -18,7 +17,6 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,10 +26,8 @@ public class LavaWalker extends CustomEnchantment {
     /** 记录被转换的方块：位置 → 原始方块数据 */
     private final Map<Location, BlockData> convertedBlocks = new ConcurrentHashMap<>();
 
-    /** 穿着熔岩行者靴子的玩家缓存 */
-    private final Set<UUID> activePlayers = ConcurrentHashMap.newKeySet();
-    /** 等级缓存（避免PDC读取） */
-    private final Map<UUID, Integer> playerLevels = new ConcurrentHashMap<>();
+    /** 被转换方块最近被熔岩行者玩家触达的游戏刻（保持存活用） */
+    private final Map<Location, Long> blockLastActive = new ConcurrentHashMap<>();
 
     /** 防火效果冷却（玩家UUID → 上次生效的游戏刻） */
     private final Map<UUID, Long> lastFireTick = new ConcurrentHashMap<>();
@@ -41,7 +37,7 @@ public class LavaWalker extends CustomEnchantment {
     private int fireDurationTicks = 120;
     private int revertDelayTicks = 100;
 
-    private ScheduledTask periodicTask;
+    private io.papermc.paper.threadedregions.scheduler.ScheduledTask keepAliveTask;
 
     public LavaWalker(YinwuEnchantments plugin) {
         super(plugin, "lava_walker", "熔岩行者", 2, new Material[] {
@@ -50,6 +46,11 @@ public class LavaWalker extends CustomEnchantment {
             Material.DIAMOND_BOOTS, Material.NETHERITE_BOOTS,
         });
         this.configManager = plugin.getConfigManager();
+    }
+
+    @Override
+    public org.bukkit.enchantments.Enchantment[] getExclusiveEnchantments() {
+        return new org.bukkit.enchantments.Enchantment[] { Enchantment.FROST_WALKER };
     }
 
     @Override
@@ -67,6 +68,25 @@ public class LavaWalker extends CustomEnchantment {
     @Override
     public void onEnable() {
         loadConfig();
+        // 周期触达玩家附近的已转换方块，模拟冰霜行者：站在上面持续冻结不还原
+        keepAliveTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (t) -> {
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                player.getScheduler().run(plugin, (task) -> {
+                    var boots = player.getInventory().getBoots();
+                    if (!hasEnchantment(boots)) return;
+                    int range = getEnchantmentLevel(boots) + 1;
+                    Location feet = player.getLocation().getBlock().getLocation();
+                    long tick = Bukkit.getCurrentTick();
+                    for (Location loc : convertedBlocks.keySet()) {
+                        if (loc.getWorld() != feet.getWorld()) continue;
+                        if (Math.abs(loc.getBlockX() - feet.getBlockX()) <= range
+                            && Math.abs(loc.getBlockZ() - feet.getBlockZ()) <= range) {
+                            blockLastActive.put(loc, tick);
+                        }
+                    }
+                }, null);
+            }
+        }, 1L, 10L);
     }
 
     @Override
@@ -86,30 +106,11 @@ public class LavaWalker extends CustomEnchantment {
                 handleBlockBreak(e);
             }
         );
-
-        plugin.getEnchantmentManager().subscribeEvent(
-            org.bukkit.event.player.PlayerQuitEvent.class,
-            event -> activePlayers.remove(event.getPlayer().getUniqueId())
-        );
-    }
-
-    @Override
-    public void onEquipmentChange(Player player) {
-        var boots = player.getInventory().getBoots();
-        if (hasEnchantment(boots)) {
-            activePlayers.add(player.getUniqueId());
-            playerLevels.put(player.getUniqueId(), getEnchantmentLevel(boots));
-        } else {
-            activePlayers.remove(player.getUniqueId());
-            playerLevels.remove(player.getUniqueId());
-        }
     }
 
     @Override
     public void onDisable() {
-        if (periodicTask != null && !periodicTask.isCancelled()) {
-            periodicTask.cancel();
-        }
+        if (keepAliveTask != null) keepAliveTask.cancel();
         for (Map.Entry<Location, BlockData> entry : convertedBlocks.entrySet()) {
             Location loc = entry.getKey();
             BlockData originalData = entry.getValue();
@@ -125,40 +126,46 @@ public class LavaWalker extends CustomEnchantment {
             }
         }
         convertedBlocks.clear();
+        blockLastActive.clear();
         lastFireTick.clear();
-    }
-
-    private void refreshStationary() {
     }
 
     private void handleMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
         if (!configManager.isEnchantmentEnabled("lava_walker")) return;
         if (player.isDead() || !player.isOnline()) return;
-        if (!activePlayers.contains(player.getUniqueId())) return;
 
-        int level = playerLevels.getOrDefault(player.getUniqueId(), 1);
+        // 实时读靴子，避免缓存失效（右键穿装备不触发 onEquipmentChange）
+        var boots = player.getInventory().getBoots();
+        if (!hasEnchantment(boots)) return;
+        int level = getEnchantmentLevel(boots);
         int range = level + 1;
 
         boolean moved = event.getFrom().getBlockX() != event.getTo().getBlockX()
                      || event.getFrom().getBlockZ() != event.getTo().getBlockZ();
         if (!moved) return;
 
-        Block center = player.getLocation().getBlock();
-        // Frost Walker 模式：以脚底为中心扫圆形一圈，只查 y=0 层
-        for (int x = -range; x <= range; x++) {
-            for (int z = -range; z <= range; z++) {
-                if (x * x + z * z > range * range) continue;
-                Block block = center.getRelative(x, 0, z);
-                if (!isLava(block.getType())) continue;
-                if (block.getRelative(0, 1, 0).getType() != Material.AIR) continue;
+        Location center = player.getLocation().getBlock().getLocation();
+        // Frost Walker 模式：扫脚下一层（行走面）+ 脚底层，以脚底为中心圆形一圈
+        // 只有空气在上的熔岩表面层会被转换 → 站在边上就能预转换前方熔岩
+        // Folia：方块检查与转换调度到所属 region 线程
+        for (int dy = -1; dy <= 0; dy++) {
+            for (int x = -range; x <= range; x++) {
+                for (int z = -range; z <= range; z++) {
+                    if (x * x + z * z > range * range) continue;
+                    Location loc = center.clone().add(x, dy, z);
+                    plugin.getServer().getRegionScheduler().run(plugin, loc, (task) -> {
+                        Block block = loc.getBlock();
+                        if (!isLava(block.getType())) return;
+                        if (block.getRelative(0, 1, 0).getType() != Material.AIR) return;
+                        if (convertedBlocks.containsKey(loc)) return;
 
-                Location loc = block.getLocation();
-                if (convertedBlocks.containsKey(loc)) continue;
-
-                convertedBlocks.put(loc, block.getBlockData().clone());
-                block.setType(Material.MAGMA_BLOCK, false);
-                scheduleRevert(loc);
+                        convertedBlocks.put(loc, block.getBlockData().clone());
+                        blockLastActive.put(loc, (long) Bukkit.getCurrentTick());
+                        block.setType(Material.MAGMA_BLOCK, false);
+                        scheduleRevert(loc);
+                    });
+                }
             }
         }
 
@@ -196,33 +203,28 @@ public class LavaWalker extends CustomEnchantment {
 
     private void scheduleRevert(Location loc) {
         plugin.getServer().getRegionScheduler().runDelayed(plugin, loc, (task) -> {
-            BlockData original = convertedBlocks.remove(loc);
-            if (original != null) {
-                Block block = loc.getBlock();
-                if (block.getType() == Material.MAGMA_BLOCK) {
-                    block.setBlockData(original, false);
-                    block.getWorld().spawnParticle(
-                        Particle.LAVA,
-                        block.getLocation().add(0.5, 1, 0.5),
-                        3, 0.3, 0.1, 0.3, 0.01
-                    );
-                }
+            BlockData original = convertedBlocks.get(loc);
+            if (original == null) return;
+
+            // 玩家仍在附近（保持存活触达过）→ 延期还原，模拟冰霜行者持续冻结
+            long tick = Bukkit.getCurrentTick();
+            Long last = blockLastActive.get(loc);
+            if (last != null && tick - last < revertDelayTicks) {
+                scheduleRevert(loc);
+                return;
+            }
+
+            convertedBlocks.remove(loc);
+            blockLastActive.remove(loc);
+            Block block = loc.getBlock();
+            if (block.getType() == Material.MAGMA_BLOCK) {
+                block.setBlockData(original, false);
+                block.getWorld().spawnParticle(
+                    Particle.LAVA,
+                    block.getLocation().add(0.5, 1, 0.5),
+                    3, 0.3, 0.1, 0.3, 0.01
+                );
             }
         }, revertDelayTicks);
-    }
-
-    public void cleanup() {
-        if (periodicTask != null && !periodicTask.isCancelled()) {
-            periodicTask.cancel();
-        }
-        for (Map.Entry<Location, BlockData> entry : convertedBlocks.entrySet()) {
-            Block block = entry.getKey().getBlock();
-            if (block.getType() == Material.MAGMA_BLOCK) {
-                try {
-                    block.setBlockData(entry.getValue(), false);
-                } catch (Exception ignored) {}
-            }
-        }
-        convertedBlocks.clear();
     }
 }

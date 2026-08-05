@@ -43,6 +43,7 @@ public abstract class CustomEnchantment {
     public String getDisplayName() { return displayName; }
     public int getMaxLevel() { return maxLevel; }
     public Material[] getApplicableItems() { return applicableItems; }
+    public NamespacedKey getEnchantmentKey() { return enchantmentKey; }
 
     public boolean canApplyTo(ItemStack item) {
         if (item == null) return false;
@@ -55,7 +56,7 @@ public abstract class CustomEnchantment {
 
     /**
      * 检测物品是否拥有此附魔。
-     * 优先读原版附魔（新格式），回退到 PDC（旧格式兼容）。
+     * 以 PDC 为准（本服务端不支持 bootstrap 原版注册）。
      */
     public boolean hasEnchantment(ItemStack item) {
         return getEnchantmentLevel(item) > 0;
@@ -66,16 +67,17 @@ public abstract class CustomEnchantment {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return 0;
 
-        // 新格式：原版附魔（Paper 1.21.11 ItemMeta 无此方法，改用 ItemStack）
+        // PDC 为准
+        Integer pdcLevel = meta.getPersistentDataContainer().get(
+            enchantmentKey, PersistentDataType.INTEGER);
+        if (pdcLevel != null && pdcLevel > 0) return pdcLevel;
+
+        // 兼容旧原版注册（在支持 bootstrap 的服务器上）
         if (registered != null) {
             int level = item.getEnchantmentLevel(registered);
             if (level > 0) return level;
         }
-
-        // 旧格式：PDC 回退
-        Integer pdcLevel = meta.getPersistentDataContainer().get(
-            enchantmentKey, PersistentDataType.INTEGER);
-        return pdcLevel != null ? pdcLevel : 0;
+        return 0;
     }
 
     public ItemStack applyEnchantment(ItemStack item, int level) {
@@ -89,17 +91,12 @@ public abstract class CustomEnchantment {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
 
-        if (registered != null) {
-            // 新格式：原版附魔
-            item.addEnchantment(registered, level);
-            item.setItemMeta(meta);
-        } else {
-            // 回退：PDC（极少情况下 registered 为 null）
-            meta.getPersistentDataContainer().set(
-                enchantmentKey, PersistentDataType.INTEGER, level);
-            meta.setEnchantmentGlintOverride(true);
-            item.setItemMeta(meta);
-        }
+        // PDC 存储 + 发光 + Lore 显示
+        meta.getPersistentDataContainer().set(enchantmentKey, PersistentDataType.INTEGER, level);
+        meta.setEnchantmentGlintOverride(true);
+        yinwuenchant.manager.EnchantmentLore.rebuild(meta,
+            plugin.getEnchantmentManager().getAllEnchantments().values());
+        item.setItemMeta(meta);
         return item;
     }
 
@@ -111,10 +108,19 @@ public abstract class CustomEnchantment {
         if (registered != null) {
             meta.removeEnchant(registered);
         }
-        // 同时清理旧 PDC 格式
         meta.getPersistentDataContainer().remove(enchantmentKey);
+        yinwuenchant.manager.EnchantmentLore.rebuild(meta,
+            plugin.getEnchantmentManager().getAllEnchantments().values());
         item.setItemMeta(meta);
         return item;
+    }
+
+    /**
+     * 与本附魔互斥的原版附魔（默认无）。
+     * 子类覆盖以定义互斥关系，附魔台/铁砧应用时会跳过冲突项。
+     */
+    public org.bukkit.enchantments.Enchantment[] getExclusiveEnchantments() {
+        return new org.bukkit.enchantments.Enchantment[0];
     }
 
     protected String getRomanNumeral(int number) {
@@ -132,18 +138,9 @@ public abstract class CustomEnchantment {
     public abstract Component displayName(int level);
 
     @SuppressWarnings("unused")
-    public void onTick() {}
-    @SuppressWarnings("unused")
-    public void onPlayerMove(org.bukkit.entity.Player player) {}
-    @SuppressWarnings("unused")
     public void onPlayerDamage(org.bukkit.entity.Player player, org.bukkit.event.entity.EntityDamageEvent event) {}
     @SuppressWarnings("unused")
     public void onBlockBreak(org.bukkit.entity.Player player, org.bukkit.event.block.BlockBreakEvent event) {}
     @SuppressWarnings("unused")
-    public void onPlayerInteract(org.bukkit.entity.Player player, org.bukkit.event.player.PlayerInteractEvent event) {}
-    @SuppressWarnings("unused")
     public void onEntityDamageByEntity(org.bukkit.event.entity.EntityDamageByEntityEvent event) {}
-
-    @SuppressWarnings("unused")
-    public void onEquipmentChange(org.bukkit.entity.Player player) {}
 }

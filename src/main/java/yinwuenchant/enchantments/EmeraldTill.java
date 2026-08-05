@@ -7,7 +7,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.event.block.BlockDropItemEvent;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -39,11 +39,12 @@ public class EmeraldTill extends CustomEnchantment {
 
     @Override
     public void registerEventSubscribers() {
+        // 用 BlockBreakEvent：草/蕨等无掉落物方块不会触发 BlockDropItemEvent
         plugin.getEnchantmentManager().subscribeEvent(
-            BlockDropItemEvent.class,
+            BlockBreakEvent.class,
             event -> {
-                BlockDropItemEvent e = (BlockDropItemEvent) event;
-                handleDrop(e);
+                BlockBreakEvent e = (BlockBreakEvent) event;
+                handleBreak(e);
             }
         );
     }
@@ -51,7 +52,7 @@ public class EmeraldTill extends CustomEnchantment {
     @Override
     public void onDisable() {}
 
-    private void handleDrop(BlockDropItemEvent event) {
+    private void handleBreak(BlockBreakEvent event) {
         if (event.isCancelled()) return;
         if (!configManager.isEnchantmentEnabled("emerald_till")) return;
         if (!isTargetPlant(event.getBlock().getType())) return;

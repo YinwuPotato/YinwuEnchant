@@ -11,15 +11,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 public class Nasus extends CustomEnchantment {
     private final ConfigManager configManager;
 
     private double range = 16.0;
-    private final Set<UUID> activePlayers = ConcurrentHashMap.newKeySet();
     private final FleeGoal fleeGoal = new FleeGoal();
 
     public Nasus(YinwuEnchantments plugin) {
@@ -40,37 +35,41 @@ public class Nasus extends CustomEnchantment {
         int interval = plugin.getConfig().getInt("enchantments.nasus.check-interval", 60);
 
         plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (task) -> {
-            for (UUID uuid : activePlayers) {
-                Player player = plugin.getServer().getPlayer(uuid);
-                if (player == null || !player.isOnline()) { activePlayers.remove(uuid); continue; }
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
                 player.getScheduler().run(plugin, t -> {
-                    fleeGoal.fleeFrom(player, plugin, AbstractSkeleton.class, range, 1.5, 30,
-                        Sound.ENTITY_WOLF_GROWL, Particle.HEART);
+                    var helmet = player.getInventory().getHelmet();
+                    if (hasEnchantment(helmet)) {
+                        fleeGoal.fleeFrom(player, plugin, AbstractSkeleton.class, range, 1.5, 30,
+                            Sound.ENTITY_WOLF_GROWL, Particle.HEART);
+                    }
                 }, null);
             }
         }, 1L, interval);
     }
 
     @Override
-    public void onEquipmentChange(Player player) {
-        var helmet = player.getInventory().getHelmet();
-        if (hasEnchantment(helmet)) activePlayers.add(player.getUniqueId());
-        else activePlayers.remove(player.getUniqueId());
-    }
-
-    @Override
-    public void onDisable() { fleeGoal.clear(); activePlayers.clear(); }
+    public void onDisable() { fleeGoal.clear(); }
 
     @Override
     public void registerEventSubscribers() {
         plugin.getEnchantmentManager().subscribeEvent(CreatureSpawnEvent.class, event -> {
             if (event.getEntity() instanceof AbstractSkeleton skeleton) {
-                skeleton.getScheduler().runDelayed(plugin, t ->
-                    fleeGoal.checkOnSpawn(skeleton, plugin, activePlayers, AbstractSkeleton.class, range, 1.5, 30,
-                        Sound.ENTITY_WOLF_GROWL, Particle.HEART), null, 5L);
+                // 生成时实时检测附近戴狗头头盔的玩家
+                skeleton.getScheduler().runDelayed(plugin, t -> {
+                    for (Player player : skeleton.getWorld().getPlayers()) {
+                        player.getScheduler().run(plugin, t2 -> {
+                            var helmet = player.getInventory().getHelmet();
+                            if (hasEnchantment(helmet)
+                                && player.getLocation().distanceSquared(skeleton.getLocation()) <= range * range) {
+                                fleeGoal.fleeFrom(player, plugin, AbstractSkeleton.class, range, 1.5, 30,
+                                    Sound.ENTITY_WOLF_GROWL, Particle.HEART);
+                            }
+                        }, null);
+                    }
+                }, null, 5L);
             }
         });
         plugin.getEnchantmentManager().subscribeEvent(PlayerQuitEvent.class,
-            event -> activePlayers.remove(event.getPlayer().getUniqueId()));
+            event -> fleeGoal.clear());
     }
 }

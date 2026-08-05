@@ -7,17 +7,12 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Phantom;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class PhantomProtection extends CustomEnchantment {
     private final ConfigManager configManager;
 
-    private final Set<UUID> protectionCache = ConcurrentHashMap.newKeySet();
     private double scanRange = 48.0;
+    private final FleeGoal fleeGoal = new FleeGoal();
 
     public PhantomProtection(YinwuEnchantments plugin) {
         super(plugin, "phantom", "幻影", 1, new Material[] {
@@ -36,27 +31,21 @@ public class PhantomProtection extends CustomEnchantment {
         scanRange = plugin.getConfig().getDouble("enchantments.phantom.scan-range", 48.0);
         int interval = plugin.getConfig().getInt("enchantments.phantom.scan-interval", 40);
 
+        // 周期检测：实时读取玩家胸甲/鞘翅，有幻影附魔则驱赶周围幻翼
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
-            for (UUID uuid : Set.copyOf(protectionCache)) {
-                Player player = plugin.getServer().getPlayer(uuid);
-                if (player == null || !player.isOnline()) { protectionCache.remove(uuid); continue; }
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
                 player.getScheduler().run(plugin, t -> {
-                    var flee = new FleeGoal();
-                    flee.fleeFrom(player, plugin, Phantom.class, scanRange, 1.5, 40, null, null);
+                    var chest = player.getInventory().getChestplate();
+                    if (hasEnchantment(chest)) {
+                        fleeGoal.fleeFrom(player, plugin, Phantom.class, scanRange, 1.5, 40, null, null);
+                    }
                 }, null);
             }
         }, 1L, interval);
     }
 
     @Override
-    public void onEquipmentChange(Player player) {
-        var chest = player.getInventory().getChestplate();
-        if (hasEnchantment(chest)) protectionCache.add(player.getUniqueId());
-        else protectionCache.remove(player.getUniqueId());
-    }
-
-    @Override
-    public void onDisable() { protectionCache.clear(); }
+    public void onDisable() { fleeGoal.clear(); }
 
     @Override
     public void registerEventSubscribers() {}

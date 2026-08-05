@@ -2,21 +2,17 @@ package yinwuenchant.enchantments;
 
 import yinwuenchant.YinwuEnchantments;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 public class VampireCurse extends CustomEnchantment {
 
     private final YinwuEnchantments plugin;
-    private final Set<UUID> activePlayers = ConcurrentHashMap.newKeySet();
+    private ScheduledTask task;
     private int checkInterval = 40;
 
     public VampireCurse(YinwuEnchantments plugin) {
@@ -39,33 +35,25 @@ public class VampireCurse extends CustomEnchantment {
         if (!plugin.getConfigManager().isEnchantmentEnabled("vampire_curse")) return;
         checkInterval = plugin.getConfig().getInt("enchantments.vampire_curse.check-interval", 40);
 
-        plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (task) -> {
-            for (UUID uuid : activePlayers) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player == null || !player.isOnline()) { activePlayers.remove(uuid); continue; }
-                player.getScheduler().run(plugin, (t) -> tickPlayer(player), null);
+        // 实时检测所有在线玩家头盔，避免缓存失效（右键穿装备不触发 onEquipmentChange）
+        task = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, (t) -> {
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                player.getScheduler().run(plugin, (t2) -> {
+                    var helmet = player.getInventory().getHelmet();
+                    if (!hasEnchantment(helmet)) return;
+                    tickPlayer(player);
+                }, null);
             }
         }, 1L, checkInterval);
     }
 
     @Override
     public void onDisable() {
-        activePlayers.clear();
-    }
-
-    @Override
-    public void onEquipmentChange(Player player) {
-        var helmet = player.getInventory().getHelmet();
-        if (hasEnchantment(helmet)) {
-            activePlayers.add(player.getUniqueId());
-        } else {
-            activePlayers.remove(player.getUniqueId());
-        }
+        if (task != null) task.cancel();
     }
 
     private void tickPlayer(Player player) {
         if (!player.isOnline()) return;
-        if (!activePlayers.contains(player.getUniqueId())) return;
 
         if (player.getWorld().getEnvironment() != World.Environment.NORMAL) return;
 

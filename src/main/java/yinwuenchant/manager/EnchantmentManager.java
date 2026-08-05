@@ -53,21 +53,22 @@ public class EnchantmentManager {
         linkRegistered(); // 在启动时查找 Registry 中的注册条目
     }
 
-    /** 从 Registry.ENCHANTMENT 查找已注册的附魔并设置到 CustomEnchantment */
+    /** 尝试链接注册表原版附魔（本服务端 bootstrap 缺陷下通常为 0，走 PDC 即可） */
     private void linkRegistered() {
-        var registry = io.papermc.paper.registry.RegistryAccess.registryAccess()
-            .getRegistry(io.papermc.paper.registry.RegistryKey.ENCHANTMENT);
-        for (var entry : enchantments.entrySet()) {
-            String id = entry.getKey();
-            CustomEnchantment ench = entry.getValue();
-            var key = org.bukkit.NamespacedKey.fromString("yinwuenchant:" + id);
-            if (key != null) {
-                org.bukkit.enchantments.Enchantment reg = registry.get(key);
-                if (reg != null) {
-                    ench.setRegistered(reg);
-                    registeredEnchantments.put(id, reg);
-                }
+        for (org.bukkit.enchantments.Enchantment ench : org.bukkit.enchantments.Enchantment.values()) {
+            var key = ench.getKey();
+            if (key == null || !"yinwuenchant".equals(key.getNamespace())) continue;
+            String id = key.getKey();
+            CustomEnchantment ce = enchantments.get(id);
+            if (ce != null) {
+                ce.setRegistered(ench);
+                registeredEnchantments.put(id, ench);
+                plugin.fine("已链接原版附魔: " + id);
             }
+        }
+        if (registeredEnchantments.size() < enchantments.size()) {
+            plugin.fine("部分附魔未链接注册表（预期，走 PDC 存储）: "
+                + registeredEnchantments.size() + "/" + enchantments.size());
         }
     }
 
@@ -163,16 +164,6 @@ public class EnchantmentManager {
     public Material[] getApplicableItems(String id) {
         CustomEnchantment enchantment = getEnchantment(id);
         return enchantment != null ? enchantment.getApplicableItems() : new Material[0];
-    }
-
-    /**
-     * 玩家装备变更时通知所有附魔更新缓存。
-     * 由 InventoryClickEvent / PlayerItemBreakEvent / PlayerJoinEvent 触发。
-     */
-    public void refreshAllCaches(org.bukkit.entity.Player player) {
-        for (CustomEnchantment ench : enchantments.values()) {
-            ench.onEquipmentChange(player);
-        }
     }
 
     // ==================== 事件订阅者模式 API ====================
