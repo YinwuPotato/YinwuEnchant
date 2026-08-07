@@ -1,7 +1,7 @@
 # YinwuEnchant — Yinwu附魔
 # YinwuEnchant — Custom Enchantments
 
-**最新版本：v1.2.1** | [下载 Release](https://github.com/qumingjam/YinwuEnchant/releases/tag/v1.2.1)
+**最新版本：v1.2.2** | [下载 Release](https://github.com/qumingjam/YinwuEnchant/releases/tag/v1.2.2)
 
 21 custom enchantments registered via Paper RegistryComposeEvent.
 
