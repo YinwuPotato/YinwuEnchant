@@ -44,6 +44,7 @@ public class FleeGoal {
                                           Class<T> mobType, double range, double fleeSpeed,
                                           int fleeTicks, Sound sound, Particle particle) {
         Location playerLoc = player.getLocation();
+        // Folia 注意：getNearbyEntities 仅返回当前区域实体，跨区域恐吓范围受限（不崩溃）
         for (var entity : playerLoc.getWorld().getNearbyEntities(
                 playerLoc, range, range, range,
                 e -> mobType.isInstance(e) && e.isValid())) {

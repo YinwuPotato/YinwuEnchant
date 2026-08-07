@@ -86,11 +86,13 @@ public class CommandHandler implements TabExecutor {
                 sender.sendMessage(ChatColor.RED + "无效等级: " + args[3]); return true; }
         }
         if (level < 1 || level > ench.getMaxLevel()) { sender.sendMessage(ChatColor.RED + "等级需在1-" + ench.getMaxLevel() + "之间"); return true; }
-        ItemStack item = target.getInventory().getItemInMainHand();
-        if (item.getType() == Material.AIR) { sender.sendMessage(ChatColor.RED + "目标手中无物品"); return true; }
-        if (!ench.canApplyTo(item)) { sender.sendMessage(ChatColor.RED + "此附魔无法应用于该物品"); return true; }
+        // Folia R6：背包读取/校验/写入都必须在目标玩家实体线程执行
         int fl = level;
         target.getScheduler().run(plugin, (t) -> {
+            if (!target.isOnline()) { sender.sendMessage(ChatColor.RED + "目标已下线"); return; }
+            ItemStack item = target.getInventory().getItemInMainHand();
+            if (item.getType() == Material.AIR) { sender.sendMessage(ChatColor.RED + "目标手中无物品"); return; }
+            if (!ench.canApplyTo(item)) { sender.sendMessage(ChatColor.RED + "此附魔无法应用于该物品"); return; }
             target.getInventory().setItemInMainHand(ench.applyEnchantment(item, fl));
             String lv = ench.getMaxLevel() == 1 ? "" : " " + fl;
             sender.sendMessage(ChatColor.GREEN + "已将 " + ench.getDisplayName() + lv + " 应用于 " + target.getName());
@@ -103,6 +105,7 @@ public class CommandHandler implements TabExecutor {
         if (args.length < 3) { sender.sendMessage(ChatColor.RED + "用法: /ye givebook <玩家> <附魔> [等级]"); return true; }
         Player target = Bukkit.getPlayer(args[1]);
         if (target == null) { sender.sendMessage(ChatColor.RED + "玩家未找到: " + args[1]); return true; }
+        if (!target.isOnline()) { sender.sendMessage(ChatColor.RED + "目标已下线"); return true; }
         String id = args[2].toLowerCase();
         CustomEnchantment ench = enchantmentManager.getEnchantment(id);
         if (ench == null) { sender.sendMessage(ChatColor.RED + "未知附魔: " + args[2]); return true; }

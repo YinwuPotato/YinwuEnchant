@@ -16,6 +16,9 @@ import org.bukkit.inventory.ItemFlag;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -23,6 +26,10 @@ public class EnchantmentGUI {
     private final YinwuEnchantments plugin;
     private final EnchantmentManager enchantmentManager;
     private final ConfigManager configManager;
+
+    /** 每玩家图标循环任务（重开/关闭时取消，防累积） */
+    private final Map<UUID, List<io.papermc.paper.threadedregions.scheduler.ScheduledTask>> cycleTasks =
+        new ConcurrentHashMap<>();
 
     private static final String TITLE = ChatColor.GOLD + "Yinwu附魔列表";
     private static final int SIZE = 54;
@@ -52,6 +59,8 @@ public class EnchantmentGUI {
     }
 
     public void open(Player player) {
+        // 取消该玩家上一次打开的循环任务（防累积）
+        cancelCycles(player.getUniqueId());
         Inventory inv = org.bukkit.Bukkit.createInventory(null, SIZE, TITLE);
         String[] ids = enchantmentManager.getEnchantmentIds();
 
@@ -144,9 +153,16 @@ public class EnchantmentGUI {
         if (items == null || items.length == 0) return;
 
         AtomicInteger idx = new AtomicInteger(ThreadLocalRandom.current().nextInt(items.length));
-        player.getScheduler().runAtFixedRate(plugin, (task) -> {
-            if (!player.isOnline()) { task.cancel(); return; }
-            if (!TITLE.equals(player.getOpenInventory().getTitle())) { task.cancel(); return; }
+        io.papermc.paper.threadedregions.scheduler.ScheduledTask scheduled =
+            player.getScheduler().runAtFixedRate(plugin, (task) -> {
+            if (!player.isOnline() || !TITLE.equals(player.getOpenInventory().getTitle())) {
+                task.cancel();
+                cycleTasks.computeIfPresent(player.getUniqueId(), (k, list) -> {
+                    list.remove(task);
+                    return list.isEmpty() ? null : list;
+                });
+                return;
+            }
             int i = idx.getAndIncrement() % items.length;
             ItemStack ni = new ItemStack(items[i]);
             ItemMeta m = ni.getItemMeta();
@@ -159,6 +175,17 @@ public class EnchantmentGUI {
             ni.setItemMeta(m);
             player.getOpenInventory().setItem(slot, ni);
         }, null, 1L, 20L);
+        cycleTasks.computeIfAbsent(player.getUniqueId(), k -> new CopyOnWriteArrayList<>()).add(scheduled);
+    }
+
+    /** 取消指定玩家的所有图标循环任务 */
+    private void cancelCycles(UUID uuid) {
+        List<io.papermc.paper.threadedregions.scheduler.ScheduledTask> tasks = cycleTasks.remove(uuid);
+        if (tasks != null) {
+            for (io.papermc.paper.threadedregions.scheduler.ScheduledTask t : tasks) {
+                if (t != null && !t.isCancelled()) t.cancel();
+            }
+        }
     }
 
     private static Material displayMaterial(String id) {

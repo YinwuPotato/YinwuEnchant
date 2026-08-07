@@ -98,6 +98,25 @@ public class ConfigManager {
         enchantmentEnabled.put("harvest", config.getBoolean("enchantments.harvest.enabled", true));
         settings.put("harvest.range", config.getInt("enchantments.harvest.range", 2));
 
+        // EmeraldTill（绿宝石耕耘）
+        enchantmentEnabled.put("emerald_till", config.getBoolean("enchantments.emerald_till.enabled", true));
+        // Airbag（安全气囊）
+        enchantmentEnabled.put("airbag", config.getBoolean("enchantments.airbag.enabled", true));
+        // Bless（祝福）
+        enchantmentEnabled.put("bless", config.getBoolean("enchantments.bless.enabled", true));
+        // VampireCurse（吸血鬼诅咒）
+        enchantmentEnabled.put("vampire_curse", config.getBoolean("enchantments.vampire_curse.enabled", true));
+        // Insomnia（失眠）
+        enchantmentEnabled.put("insomnia", config.getBoolean("enchantments.insomnia.enabled", true));
+        // Soulbound（灵魂绑定）
+        enchantmentEnabled.put("soulbound", config.getBoolean("enchantments.soulbound.enabled", true));
+        // Smelt（熔炼）
+        enchantmentEnabled.put("smelt", config.getBoolean("enchantments.smelt.enabled", true));
+        // StepUp（马蹄）
+        enchantmentEnabled.put("step_up", config.getBoolean("enchantments.step_up.enabled", true));
+        // LavaWalker（熔岩行者）
+        enchantmentEnabled.put("lava_walker", config.getBoolean("enchantments.lava_walker.enabled", true));
+
         // 调试模式
         settings.put("debug", config.getBoolean("debug", false));
 

@@ -7,6 +7,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.enchantment.EnchantItemEvent;
@@ -261,7 +262,7 @@ public class EnchantmentAcquisitionManager implements Listener {
         if (changed) {
             applyRename(event, result);
             event.setResult(result);
-            forceConsumeSacrifice(event);
+            // 牺牲槽消耗由 onAnvilTake 处理（纯 Paper API，替代原 NMS 反射）
             event.getInventory().setRepairCost(Math.min(39, event.getInventory().getRepairCost() + 1));
         }
     }
@@ -286,21 +287,32 @@ public class EnchantmentAcquisitionManager implements Listener {
     }
 
     /**
-     * 强制消耗 slot1（第二件物品/书）。
-     * 原版 createResult() 对"满耐久 + 无原版附魔"的物品判定为仅重命名（onlyRenaming=true），
-     * 导致 onTake 不消耗 slot1。这里用反射把 repairItemCountCost 置 1，
-     * 使 onTake 走"消耗 slot1"分支。
+     * 铁砧取走结果时，若牺牲槽是自定义附魔书/物品（原版 onlyRenaming 不消耗），
+     * 手动清空牺牲槽防止白嫖复制。纯 Paper API，无 NMS。
      */
-    private void forceConsumeSacrifice(org.bukkit.event.inventory.PrepareAnvilEvent event) {
-        try {
-            Object view = event.getView();
-            java.lang.reflect.Method getHandle = view.getClass().getMethod("getHandle");
-            Object anvilMenu = getHandle.invoke(view);
-            java.lang.reflect.Field field = anvilMenu.getClass().getField("repairItemCountCost");
-            field.setInt(anvilMenu, 1);
-        } catch (Exception ignored) {
-            // 反射失败则退回原版行为
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onAnvilTake(org.bukkit.event.inventory.InventoryClickEvent event) {
+        if (event.isCancelled()) return;
+        if (event.getRawSlot() != 2) return;                 // 仅铁砧结果槽
+        if (!(event.getClickedInventory() instanceof org.bukkit.inventory.AnvilInventory anvil)) return;
+        // 结果槽为空时点取不算取走，避免误吞牺牲槽物品
+        ItemStack result = event.getCurrentItem();
+        if (result == null || result.getType().isAir()) return;
+        ItemStack sacrifice = anvil.getItem(1);
+        if (hasCustomEnchantPDC(sacrifice)) {
+            anvil.setItem(1, null);
         }
+    }
+
+    /** 物品是否带任意自定义附魔 PDC（自定义书或已附魔物品） */
+    private boolean hasCustomEnchantPDC(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        ItemMeta meta = item.getItemMeta();
+        for (CustomEnchantment ench : enchantmentManager.getAllEnchantments().values()) {
+            if (meta.getPersistentDataContainer().has(ench.getEnchantmentKey(),
+                org.bukkit.persistence.PersistentDataType.INTEGER)) return true;
+        }
+        return false;
     }
 
     /** 检查目标物品是否已含与指定附魔互斥的原版附魔 */
@@ -343,7 +355,7 @@ public class EnchantmentAcquisitionManager implements Listener {
                 if (result != null) {
                     applyRename(event, result);
                     event.setResult(result);
-                    forceConsumeSacrifice(event);
+                    // 牺牲槽消耗由 onAnvilTake 处理（纯 Paper API，替代原 NMS 反射）
                     event.getInventory().setRepairCost(Math.min(39, event.getInventory().getRepairCost() + 1));
                 }
                 return;
@@ -375,7 +387,7 @@ public class EnchantmentAcquisitionManager implements Listener {
             result = ench.applyEnchantment(result, applied);
             applyRename(event, result);
             event.setResult(result);
-            forceConsumeSacrifice(event);
+            // 牺牲槽消耗由 onAnvilTake 处理（纯 Paper API，替代原 NMS 反射）
             event.getInventory().setRepairCost(Math.min(39, event.getInventory().getRepairCost() + 1));
             return;
         }

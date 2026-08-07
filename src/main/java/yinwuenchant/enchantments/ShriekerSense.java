@@ -3,15 +3,20 @@ package yinwuenchant.enchantments;
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.manager.ConfigManager;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,6 +29,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ShriekerSense extends CustomEnchantment {
+    /** TextDisplay 标记键：用于启动时清扫上次禁用残留的提示实体 */
+    private static final NamespacedKey DISPLAY_MARKER =
+        new NamespacedKey("yinwuenchant", "shrieker_display");
+
     private final ConfigManager configManager;
     private final Set<EntityType> sculkEntities;
     // 存储每个玩家创建的 TextDisplay 实体列表（使用 ConcurrentHashMap 保证线程安全）
@@ -32,6 +41,8 @@ public class ShriekerSense extends CustomEnchantment {
     private final Map<Location, TextDisplay> textDisplayByLocation = new ConcurrentHashMap<>();
     // 存储每个玩家的冷却时间（UUID -> 最后使用时间戳，毫秒）
     private final Map<UUID, Long> playerCooldowns = new ConcurrentHashMap<>();
+    // 被高亮的实体 UUID（用于清理发光效果，避免残留）
+    private final Set<UUID> highlightedEntities = ConcurrentHashMap.newKeySet();
 
     public ShriekerSense(YinwuEnchantments plugin) {
         super(plugin, "shrieker_sense", "幽匿探测", 1, new Material[] {
@@ -60,10 +71,45 @@ public class ShriekerSense extends CustomEnchantment {
         if (!enabled) {
             return;
         }
+
+        // 启动清扫：移除上次禁用时残留的标记 TextDisplay（Folia：逐 chunk 在其 region 线程执行）
+        sweepResidualDisplays();
+    }
+
+    /** 清扫世界内残留的幽匿探测提示实体（带 PDC 标记的 TextDisplay）。尽力而为，失败不阻断启用。 */
+    private void sweepResidualDisplays() {
+        try {
+            for (World world : Bukkit.getWorlds()) {
+                for (Chunk chunk : world.getLoadedChunks()) {
+                    final int cx = chunk.getX();
+                    final int cz = chunk.getZ();
+                    plugin.getServer().getRegionScheduler().run(plugin, world, cx, cz, (task) -> {
+                        try {
+                            for (Entity e : chunk.getEntities()) {
+                                if (e.getType() == EntityType.TEXT_DISPLAY
+                                    && e.getPersistentDataContainer().has(DISPLAY_MARKER)) {
+                                    e.remove();
+                                }
+                            }
+                        } catch (Exception ignored) {
+                            // 单块清扫失败不影响其他块
+                        }
+                    });
+                }
+            }
+        } catch (Exception e) {
+            // Folia 下世界/区块枚举可能受限，清扫降级为跳过
+            if (plugin.getConfigManager().getBoolean("debug")) {
+                plugin.getLogger().fine("[幽匿探测] 启动清扫跳过: " + e.getMessage());
+            }
+        }
     }
 
     @Override
     public void onDisable() {
+        // 先清除被高亮实体的发光效果，避免 reload 后监守者仍发光
+        clearGlowEffects();
+
         if (plugin.getConfigManager().getBoolean("debug")) {
             int totalDisplays = playerTextDisplays.values().stream()
                 .mapToInt(List::size)
@@ -132,6 +178,7 @@ public class ShriekerSense extends CustomEnchantment {
                     int duration = configManager.getInt("shrieker_sense.highlight-duration");
 
                     // 高亮附近的潜声生物（实体）- 只添加发光效果
+                    // Folia 注意：getNearbyEntities 仅返回当前区域实体，跨区域生物不会被高亮（范围受限，不崩溃）
                     int entityCount = 0;
                     for (Entity entity : player.getNearbyEntities(range, range, range)) {
                         if (sculkEntities.contains(entity.getType())) {
@@ -195,14 +242,33 @@ public class ShriekerSense extends CustomEnchantment {
 
     private void highlightEntity(Entity entity, int durationTicks) {
         if (entity instanceof org.bukkit.entity.LivingEntity livingEntity) {
+            // 追踪被高亮实体，供清理发光效果
+            highlightedEntities.add(entity.getUniqueId());
             // Folia R6: 实体可能在其他 Region，在其实体线程施加效果
             entity.getScheduler().run(plugin, task -> {
-                livingEntity.addPotionEffect(new org.bukkit.potion.PotionEffect(
-                    org.bukkit.potion.PotionEffectType.GLOWING,
-                    durationTicks, 0, true, false, false
-                ));
+                if (!livingEntity.isDead()) {
+                    livingEntity.addPotionEffect(new org.bukkit.potion.PotionEffect(
+                        org.bukkit.potion.PotionEffectType.GLOWING,
+                        durationTicks, 0, true, false, false
+                    ));
+                }
             }, null);
         }
+    }
+
+    /** 清除所有被高亮实体的发光效果（下次探测/reload 时调用，Folia：逐实体线程移除） */
+    private void clearGlowEffects() {
+        for (UUID uuid : highlightedEntities) {
+            Entity e = Bukkit.getEntity(uuid);
+            if (e instanceof org.bukkit.entity.LivingEntity living) {
+                living.getScheduler().run(plugin, task -> {
+                    if (!living.isDead()) {
+                        living.removePotionEffect(org.bukkit.potion.PotionEffectType.GLOWING);
+                    }
+                }, null);
+            }
+        }
+        highlightedEntities.clear();
     }
 
     private void highlightSculkShriekers(org.bukkit.entity.Player player, int range, int durationTicks, AtomicInteger count) {
@@ -267,6 +333,9 @@ public class ShriekerSense extends CustomEnchantment {
             // 设置大小（通过 transformation scale）- 放大到包裹整个方块
             textDisplay.setTransformationMatrix(new org.joml.Matrix4f().scale(16f, 16f, 16f));
 
+            // 打 PDC 标记：供启动清扫识别残留实体
+            textDisplay.getPersistentDataContainer().set(DISPLAY_MARKER, PersistentDataType.BYTE, (byte) 1);
+
             // 将该 TextDisplay 添加到玩家列表和位置表中
             playerTextDisplays.computeIfAbsent(playerUUID, k -> new CopyOnWriteArrayList<>()).add(textDisplay);
             textDisplayByLocation.put(location, textDisplay);
@@ -299,6 +368,8 @@ public class ShriekerSense extends CustomEnchantment {
      * 清除指定玩家的所有 TextDisplay 实体（需要在对应区域线程执行）
      */
     private void clearPlayerTextDisplays(UUID playerUUID) {
+        // 重新探测前先清除旧高亮发光
+        clearGlowEffects();
         List<TextDisplay> displays = playerTextDisplays.get(playerUUID);
         if (displays == null || displays.isEmpty()) return;
 

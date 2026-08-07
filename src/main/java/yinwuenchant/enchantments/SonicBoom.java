@@ -98,6 +98,7 @@ public class SonicBoom extends CustomEnchantment {
                 ScheduledTask task = chargeTasks.remove(uuid);
                 if (task != null && !task.isCancelled()) task.cancel();
                 chargeTick.remove(uuid);
+                cooldowns.remove(uuid);
             }
         );
     }
@@ -166,6 +167,7 @@ public class SonicBoom extends CustomEnchantment {
         CustomEnchantment resonate = plugin.getEnchantmentManager().getEnchantment("resonate");
         Set<UUID> damaged = new HashSet<>();
         double radius = 1.2;
+        // Folia 注意：getNearbyEntities 仅在当前区域线程内生效，跨区域实体不会被命中（范围受限，不崩溃）
         Collection<Entity> nearby = player.getWorld().getNearbyEntities(start, range, 3.0, range);
         for (Entity entity : nearby) {
             if (!(entity instanceof LivingEntity living) || entity.equals(player)) continue;

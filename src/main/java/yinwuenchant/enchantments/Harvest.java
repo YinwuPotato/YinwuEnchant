@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -194,32 +195,44 @@ public class Harvest extends CustomEnchantment {
             player.getScheduler().run(plugin, (t) -> setCooldown(player), null);
 
             AtomicInteger harvestedCount = new AtomicInteger();
+            // 完成计数：所有区域任务跑完后才统计反馈（替代固定延迟，避免统计为 0）
+            int side = 2 * harvestRange + 1;
+            int totalTasks = side * side * side;
+            AtomicInteger completedTasks = new AtomicInteger();
+            AtomicBoolean feedbackSent = new AtomicBoolean(false);
+            Runnable sendFeedback = () -> {
+                // CAS 保证只反馈一次（完成路径 + 兜底定时器竞争）
+                if (!feedbackSent.compareAndSet(false, true) || !player.isOnline()) return;
+                int count = harvestedCount.get();
+                if (count > 0) {
+                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1.0f, 1.0f);
+                    if (plugin.getConfigManager().getBoolean("debug")) {
+                        plugin.getLogger().fine("[丰收] 玩家 " + player.getName() + " 收获了 " + count + " 个作物");
+                    }
+                }
+            };
             for (int x = -harvestRange; x <= harvestRange; x++) {
                 for (int y = -harvestRange; y <= harvestRange; y++) {
                     for (int z = -harvestRange; z <= harvestRange; z++) {
                         Location loc = center.clone().add(x, y, z);
                         plugin.getServer().getRegionScheduler().run(plugin, loc, (t2) -> {
-                            Block block = loc.getBlock();
-                            if (isHarvestableCrop(block) && harvestSingleCrop(block, fortuneLevel)) {
-                                harvestedCount.incrementAndGet();
+                            try {
+                                Block block = loc.getBlock();
+                                if (isHarvestableCrop(block) && harvestSingleCrop(block, fortuneLevel)) {
+                                    harvestedCount.incrementAndGet();
+                                }
+                            } finally {
+                                if (completedTasks.incrementAndGet() == totalTasks) {
+                                    // 全部完成后回玩家线程播音效/日志
+                                    player.getScheduler().run(plugin, (t3) -> sendFeedback.run(), null);
+                                }
                             }
                         });
                     }
                 }
             }
-
-            // 延迟两拍统计后再回玩家线程播音效/日志
-            player.getScheduler().runDelayed(plugin, (t3) -> {
-                if (player.isOnline()) {
-                    int count = harvestedCount.get();
-                    if (count > 0) {
-                        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1.0f, 1.0f);
-                        if (plugin.getConfigManager().getBoolean("debug")) {
-                            plugin.getLogger().fine("[丰收] 玩家 " + player.getName() + " 收获了 " + count + " 个作物");
-                        }
-                    }
-                }
-            }, null, 2L);
+            // 兜底：部分区块任务未执行时，超时后仍反馈当前统计
+            player.getScheduler().runDelayed(plugin, (t3) -> sendFeedback.run(), null, 100L);
         });
     }
 
