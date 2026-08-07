@@ -9,7 +9,7 @@
   <groupId>YinwuEnchant</groupId>
   <artifactId>YinwuEnchant</artifactId>
   <name>YinwuEnchant</name>
-  <version>1.2.2</version>
+  <version>1.2.3</version>
   <description>12 unique custom enchantments for Paper/Folia 1.21+</description>
   <build>
     <defaultGoal>clean package</defaultGoal>

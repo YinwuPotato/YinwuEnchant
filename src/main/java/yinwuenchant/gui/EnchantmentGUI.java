@@ -35,23 +35,39 @@ public class EnchantmentGUI {
     private static final int SIZE = 54;
 
     private static final Map<String, Integer> SLOTS = Map.ofEntries(
-        // 第一行：头盔
-        Map.entry("clearsight", 0), Map.entry("nasus", 1),
-        Map.entry("insomnia", 2), Map.entry("vampire_curse", 3),
-        // 第二行：胸甲/鞘翅
-        Map.entry("sonic_boom", 9), Map.entry("bless", 10),
-        Map.entry("phantom", 11), Map.entry("airbag", 12),
-        // 第三行：护腿
-        Map.entry("safefall", 18),
-        // 第四行：鞋子
-        Map.entry("darkspeed", 27), Map.entry("cats_paw", 28),
-        Map.entry("lava_walker", 29), Map.entry("step_up", 30),
-        // 第五行：武器
-        Map.entry("master_of_beef_slicing", 36), Map.entry("resonate", 37),
-        // 第六行：工具
-        Map.entry("undermine", 45), Map.entry("harvest", 46),
-        Map.entry("smelt", 47), Map.entry("emerald_till", 48),
-        Map.entry("shrieker_sense", 49), Map.entry("soulbound", 50)
+        // 第一行：头盔（标题格 0）
+        Map.entry("clearsight", 1), Map.entry("nasus", 2),
+        Map.entry("insomnia", 3), Map.entry("vampire_curse", 4),
+        // 第二行：胸甲/鞘翅（标题格 9）
+        Map.entry("sonic_boom", 10), Map.entry("bless", 11),
+        Map.entry("phantom", 12), Map.entry("airbag", 13),
+        // 第三行：护腿（标题格 18）
+        Map.entry("safefall", 19),
+        // 第四行：靴子（标题格 27）
+        Map.entry("darkspeed", 28), Map.entry("cats_paw", 29),
+        Map.entry("lava_walker", 30), Map.entry("step_up", 31),
+        // 第五行：武器（标题格 36）
+        Map.entry("master_of_beef_slicing", 37), Map.entry("resonate", 38),
+        // 第六行：工具（标题格 45）
+        Map.entry("undermine", 46), Map.entry("harvest", 47),
+        Map.entry("smelt", 48), Map.entry("emerald_till", 49),
+        Map.entry("shrieker_sense", 50), Map.entry("soulbound", 51)
+    );
+
+    /** 每行类别标题格位 */
+    private static final Map<Integer, String> HEADERS = Map.of(
+        0, "头盔附魔", 9, "胸甲/鞘翅附魔", 18, "护腿附魔",
+        27, "靴子附魔", 36, "武器附魔", 45, "工具附魔"
+    );
+
+    /** 每行标题玻璃板颜色（各不相同） */
+    private static final Map<Integer, Material> HEADER_COLORS = Map.of(
+        0, Material.BLUE_STAINED_GLASS_PANE,
+        9, Material.RED_STAINED_GLASS_PANE,
+        18, Material.GREEN_STAINED_GLASS_PANE,
+        27, Material.YELLOW_STAINED_GLASS_PANE,
+        36, Material.ORANGE_STAINED_GLASS_PANE,
+        45, Material.PURPLE_STAINED_GLASS_PANE
     );
 
     public EnchantmentGUI(YinwuEnchantments plugin, EnchantmentManager em, ConfigManager cm) {
@@ -64,25 +80,43 @@ public class EnchantmentGUI {
         Inventory inv = org.bukkit.Bukkit.createInventory(null, SIZE, TITLE);
         String[] ids = enchantmentManager.getEnchantmentIds();
 
+        // 玻璃板底色
+        ItemStack filler = fillerItem();
+        for (int i = 0; i < SIZE; i++) inv.setItem(i, filler);
+
+        // 类别标题行
+        HEADERS.forEach((slot, name) -> inv.setItem(slot, headerItem(slot, name)));
+
+        // 附魔图标
         for (String id : ids) {
             Integer slot = SLOTS.get(id);
             if (slot == null) continue;
             CustomEnchantment ench = enchantmentManager.getEnchantment(id);
             if (ench == null) continue;
-
             ItemStack item = buildItem(id, ench);
             if (item != null) inv.setItem(slot, item);
         }
 
+        player.openInventory(inv);
+        startCycles(player, ids);
+    }
+
+    private ItemStack fillerItem() {
         ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta fm = filler.getItemMeta();
         if (fm != null) { fm.setDisplayName(" "); filler.setItemMeta(fm); }
-        for (int i = 0; i < SIZE; i++) {
-            if (!SLOTS.containsValue(i)) inv.setItem(i, filler);
-        }
+        return filler;
+    }
 
-        player.openInventory(inv);
-        startCycles(player, ids);
+    private ItemStack headerItem(int slot, String name) {
+        ItemStack item = new ItemStack(HEADER_COLORS.getOrDefault(slot, Material.LIGHT_BLUE_STAINED_GLASS_PANE));
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.AQUA + "✦ " + name);
+            meta.setLore(List.of(ChatColor.GRAY + "━━━━━━━━━━━━━━━━━━━━"));
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     public static boolean matches(String title) { return TITLE.equals(title); }
@@ -134,6 +168,8 @@ public class EnchantmentGUI {
                 l.add(lore("最大等级: " + ench.getMaxLevel()));
             }
         }
+        l.add(ChatColor.DARK_GRAY + "ID: " + id);
+        l.add(configManager.isEnchantmentEnabled(id) ? ChatColor.GREEN + "状态: 已启用" : ChatColor.RED + "状态: 已禁用");
         l.add(ChatColor.GRAY + "━━━━━━━━━━━━━━━━━━━━");
         return l;
     }

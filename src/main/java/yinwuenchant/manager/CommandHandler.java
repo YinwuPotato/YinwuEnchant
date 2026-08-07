@@ -34,19 +34,23 @@ public class CommandHandler implements TabExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!sender.hasPermission("yinwu.enchant.use")) {
+            sender.sendMessage(ChatColor.RED + "你没有权限使用此命令。");
+            return true;
+        }
         if (args.length == 0) { sendHelp(sender); return true; }
         return switch (args[0].toLowerCase()) {
             case "give" -> adminCheck(sender) ? handleGiveCommand(sender, args) : true;
             case "givebook" -> adminCheck(sender) ? handleGiveBookCommand(sender, args) : true;
             case "reload" -> adminCheck(sender) ? handleReloadCommand(sender, args) : true;
-            case "list" -> handleListCommand(sender);
+            case "gui" -> handleGuiCommand(sender);
             default -> { sendHelp(sender); yield true; }
         };
     }
 
     private boolean adminCheck(CommandSender s) {
-        if (!s.hasPermission("yinwuenchant.admin")) {
-            s.sendMessage(ChatColor.RED + "未知的子命令。请使用 /ye list 查看附魔列表。");
+        if (!s.hasPermission("yinwu.enchant.admin")) {
+            s.sendMessage(ChatColor.RED + "未知的子命令。请使用 /yinwuenchant gui 查看附魔列表。");
             return false;
         }
         return true;
@@ -57,8 +61,8 @@ public class CommandHandler implements TabExecutor {
         List<String> completions = new ArrayList<>();
         if (args.length == 1) {
             List<String> cmds = new ArrayList<>();
-            if (sender.hasPermission("yinwuenchant.admin")) { cmds.add("give"); cmds.add("givebook"); cmds.add("reload"); }
-            if (sender.hasPermission("yinwuenchant.use")) cmds.add("list");
+            if (sender.hasPermission("yinwu.enchant.admin")) { cmds.add("give"); cmds.add("givebook"); cmds.add("reload"); }
+            if (sender.hasPermission("yinwu.enchant.use")) cmds.add("gui");
             StringUtil.copyPartialMatches(args[0], cmds, completions);
         } else if (args.length == 2 && (args[0].equals("give") || args[0].equals("givebook"))) {
             for (Player p : Bukkit.getOnlinePlayers())
@@ -74,7 +78,7 @@ public class CommandHandler implements TabExecutor {
     }
 
     private boolean handleGiveCommand(CommandSender sender, String[] args) {
-        if (args.length < 3) { sender.sendMessage(ChatColor.RED + "用法: /ye give <玩家> <附魔> [等级]"); return true; }
+        if (args.length < 3) { sender.sendMessage(ChatColor.RED + "用法: /yinwuenchant give <玩家> <附魔> [等级]"); return true; }
         Player target = Bukkit.getPlayer(args[1]);
         if (target == null) { sender.sendMessage(ChatColor.RED + "玩家未找到: " + args[1]); return true; }
         String id = args[2].toLowerCase();
@@ -102,7 +106,7 @@ public class CommandHandler implements TabExecutor {
     }
 
     private boolean handleGiveBookCommand(CommandSender sender, String[] args) {
-        if (args.length < 3) { sender.sendMessage(ChatColor.RED + "用法: /ye givebook <玩家> <附魔> [等级]"); return true; }
+        if (args.length < 3) { sender.sendMessage(ChatColor.RED + "用法: /yinwuenchant givebook <玩家> <附魔> [等级]"); return true; }
         Player target = Bukkit.getPlayer(args[1]);
         if (target == null) { sender.sendMessage(ChatColor.RED + "玩家未找到: " + args[1]); return true; }
         if (!target.isOnline()) { sender.sendMessage(ChatColor.RED + "目标已下线"); return true; }
@@ -135,21 +139,21 @@ public class CommandHandler implements TabExecutor {
         return true;
     }
 
-    private boolean handleListCommand(CommandSender sender) {
-        if (!sender.hasPermission("yinwuenchant.use")) { sender.sendMessage(ChatColor.RED + "无权限"); return true; }
+    private boolean handleGuiCommand(CommandSender sender) {
+        if (!sender.hasPermission("yinwu.enchant.use")) { sender.sendMessage(ChatColor.RED + "无权限"); return true; }
         if (!(sender instanceof Player p)) { sender.sendMessage(ChatColor.RED + "仅玩家可用"); return true; }
         gui.open(p);
         return true;
     }
 
     private void sendHelp(CommandSender s) {
-        if (!s.hasPermission("yinwuenchant.use")) { s.sendMessage(ChatColor.RED + "无权限"); return; }
+        if (!s.hasPermission("yinwu.enchant.use")) { s.sendMessage(ChatColor.RED + "无权限"); return; }
         s.sendMessage(ChatColor.GOLD + "=== YinwuEnchantments ===");
-        s.sendMessage(ChatColor.YELLOW + "/ye list" + ChatColor.WHITE + " - 列出附魔");
-        if (s.hasPermission("yinwuenchant.admin")) {
-            s.sendMessage(ChatColor.YELLOW + "/ye give <玩家> <附魔> [等级]" + ChatColor.WHITE + " - 给予附魔物品");
-            s.sendMessage(ChatColor.YELLOW + "/ye givebook <玩家> <附魔> [等级]" + ChatColor.WHITE + " - 给予附魔书");
-            s.sendMessage(ChatColor.YELLOW + "/ye reload" + ChatColor.WHITE + " - 重载配置");
+        s.sendMessage(ChatColor.YELLOW + "/yinwuenchant gui" + ChatColor.WHITE + " - 列出附魔");
+        if (s.hasPermission("yinwu.enchant.admin")) {
+            s.sendMessage(ChatColor.YELLOW + "/yinwuenchant give <玩家> <附魔> [等级]" + ChatColor.WHITE + " - 给予附魔物品");
+            s.sendMessage(ChatColor.YELLOW + "/yinwuenchant givebook <玩家> <附魔> [等级]" + ChatColor.WHITE + " - 给予附魔书");
+            s.sendMessage(ChatColor.YELLOW + "/yinwuenchant reload" + ChatColor.WHITE + " - 重载配置");
         }
     }
 }
