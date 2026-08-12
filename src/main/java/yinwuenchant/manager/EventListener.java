@@ -3,7 +3,9 @@ package yinwuenchant.manager;
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.enchantments.CustomEnchantment;
 import yinwuenchant.enchantments.ShriekerSense;
+import yinwuenchant.gui.EnchantmentToggleGUI;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -14,6 +16,8 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -25,10 +29,13 @@ import org.bukkit.event.player.PlayerToggleSneakEvent;
 public class EventListener implements Listener {
     private final YinwuEnchantments plugin;
     private final EnchantmentManager enchantmentManager;
+    private final EnchantmentToggleGUI toggleGui;
 
-    public EventListener(YinwuEnchantments plugin, EnchantmentManager enchantmentManager) {
+    public EventListener(YinwuEnchantments plugin, EnchantmentManager enchantmentManager,
+                         EnchantmentToggleGUI toggleGui) {
         this.plugin = plugin;
         this.enchantmentManager = enchantmentManager;
+        this.toggleGui = toggleGui;
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
@@ -111,9 +118,36 @@ public class EventListener implements Listener {
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        // GUI 锁定
-        if (event.getView().getTitle().contains("Yinwu附魔列表")) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        String title = event.getView().getTitle();
+
+        // 一级目录：slot 53 进入二级界面
+        if (title.contains("Yinwu附魔列表")) {
             event.setCancelled(true);
+            if (event.getRawSlot() == 53) {
+                player.getScheduler().run(plugin, (t) -> toggleGui.open(player), null);
+            }
+            return;
+        }
+        // 二级附魔开关
+        if (EnchantmentToggleGUI.matches(title)) {
+            toggleGui.handleClick(player, event);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) return;
+        if (EnchantmentToggleGUI.matches(event.getView().getTitle())) {
+            toggleGui.handleDrag(event);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        if (EnchantmentToggleGUI.matches(event.getView().getTitle())) {
+            toggleGui.handleClose(player);
         }
     }
 }

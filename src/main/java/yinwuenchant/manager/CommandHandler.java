@@ -3,6 +3,7 @@ package yinwuenchant.manager;
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.enchantments.CustomEnchantment;
 import yinwuenchant.gui.EnchantmentGUI;
+import yinwuenchant.gui.EnchantmentToggleGUI;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -23,13 +24,16 @@ public class CommandHandler implements TabExecutor {
     private final EnchantmentAcquisitionManager acquisitionManager;
     private final ConfigManager configManager;
     private final EnchantmentGUI gui;
+    private final EnchantmentToggleGUI toggleGui;
 
-    public CommandHandler(YinwuEnchantments plugin, EnchantmentManager em, EnchantmentAcquisitionManager am, ConfigManager cm) {
+    public CommandHandler(YinwuEnchantments plugin, EnchantmentManager em, EnchantmentAcquisitionManager am,
+                          ConfigManager cm, EnchantmentToggleGUI toggleGui) {
         this.plugin = plugin;
         this.enchantmentManager = em;
         this.acquisitionManager = am;
         this.configManager = cm;
         this.gui = new EnchantmentGUI(plugin, em, cm);
+        this.toggleGui = toggleGui;
     }
 
     @Override
@@ -44,6 +48,7 @@ public class CommandHandler implements TabExecutor {
             case "givebook" -> adminCheck(sender) ? handleGiveBookCommand(sender, args) : true;
             case "reload" -> adminCheck(sender) ? handleReloadCommand(sender, args) : true;
             case "gui" -> handleGuiCommand(sender);
+            case "toggle" -> handleToggleCommand(sender);
             default -> { sendHelp(sender); yield true; }
         };
     }
@@ -62,7 +67,7 @@ public class CommandHandler implements TabExecutor {
         if (args.length == 1) {
             List<String> cmds = new ArrayList<>();
             if (sender.hasPermission("yinwu.enchant.admin")) { cmds.add("give"); cmds.add("givebook"); cmds.add("reload"); }
-            if (sender.hasPermission("yinwu.enchant.use")) cmds.add("gui");
+            if (sender.hasPermission("yinwu.enchant.use")) { cmds.add("gui"); cmds.add("toggle"); }
             StringUtil.copyPartialMatches(args[0], cmds, completions);
         } else if (args.length == 2 && (args[0].equals("give") || args[0].equals("givebook"))) {
             for (Player p : Bukkit.getOnlinePlayers())
@@ -146,10 +151,18 @@ public class CommandHandler implements TabExecutor {
         return true;
     }
 
+    private boolean handleToggleCommand(CommandSender sender) {
+        if (!sender.hasPermission("yinwu.enchant.use")) { sender.sendMessage(ChatColor.RED + "无权限"); return true; }
+        if (!(sender instanceof Player p)) { sender.sendMessage(ChatColor.RED + "仅玩家可用"); return true; }
+        toggleGui.open(p);
+        return true;
+    }
+
     private void sendHelp(CommandSender s) {
         if (!s.hasPermission("yinwu.enchant.use")) { s.sendMessage(ChatColor.RED + "无权限"); return; }
         s.sendMessage(ChatColor.GOLD + "=== YinwuEnchantments ===");
         s.sendMessage(ChatColor.YELLOW + "/yinwuenchant gui" + ChatColor.WHITE + " - 列出附魔");
+        s.sendMessage(ChatColor.YELLOW + "/yinwuenchant toggle" + ChatColor.WHITE + " - 管理物品附魔开关");
         if (s.hasPermission("yinwu.enchant.admin")) {
             s.sendMessage(ChatColor.YELLOW + "/yinwuenchant give <玩家> <附魔> [等级]" + ChatColor.WHITE + " - 给予附魔物品");
             s.sendMessage(ChatColor.YELLOW + "/yinwuenchant givebook <玩家> <附魔> [等级]" + ChatColor.WHITE + " - 给予附魔书");

@@ -97,6 +97,9 @@ public class EnchantmentGUI {
             if (item != null) inv.setItem(slot, item);
         }
 
+        // 二级界面入口（slot 53）
+        inv.setItem(53, toggleEntryItem());
+
         player.openInventory(inv);
         startCycles(player, ids);
     }
@@ -120,6 +123,18 @@ public class EnchantmentGUI {
     }
 
     public static boolean matches(String title) { return TITLE.equals(title); }
+
+    /** 二级界面入口按钮（点击打开单物品附魔开关，由 EventListener 处理） */
+    private ItemStack toggleEntryItem() {
+        ItemStack item = new ItemStack(Material.LEVER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.YELLOW + "附魔开关");
+            meta.setLore(List.of(ChatColor.GRAY + "点击管理物品上的自定义附魔"));
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
 
     private ItemStack buildItem(String id, CustomEnchantment ench) {
         Material mat = displayMaterial(id);
@@ -215,7 +230,7 @@ public class EnchantmentGUI {
     }
 
     /** 取消指定玩家的所有图标循环任务 */
-    private void cancelCycles(UUID uuid) {
+    public void cancelCycles(UUID uuid) {
         List<io.papermc.paper.threadedregions.scheduler.ScheduledTask> tasks = cycleTasks.remove(uuid);
         if (tasks != null) {
             for (io.papermc.paper.threadedregions.scheduler.ScheduledTask t : tasks) {

@@ -13,11 +13,11 @@
 
     <groupId>YinwuEnchant</groupId>
     <artifactId>YinwuEnchant</artifactId>
-    <version>1.2.3</version>
+    <version>1.2.4</version>
     <packaging>jar</packaging>
 
     <name>YinwuEnchant</name>
-    <description>12 unique custom enchantments for Paper/Folia 1.21+</description>
+    <description>21 custom enchantments (PDC-based) for Paper/Folia 1.21+, with per-item enchant toggle GUI</description>
 
     <build>
         <defaultGoal>clean package</defaultGoal>

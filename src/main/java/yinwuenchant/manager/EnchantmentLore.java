@@ -19,7 +19,7 @@ public final class EnchantmentLore {
 
     private EnchantmentLore() {}
 
-    /** 从 ItemMeta 的 PDC 重建所有自定义附魔的 Lore 行 */
+    /** 从 ItemMeta 的 PDC 重建所有自定义附魔的 Lore 行（禁用附魔显示删除线+已禁用标记） */
     public static void rebuild(ItemMeta meta, Collection<CustomEnchantment> all) {
         List<String> lore = meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.removeIf(line -> isEnchantLine(line, all));
@@ -27,7 +27,9 @@ public final class EnchantmentLore {
             Integer level = meta.getPersistentDataContainer()
                 .get(ench.getEnchantmentKey(), PersistentDataType.INTEGER);
             if (level != null && level > 0) {
-                lore.add(0, formatLine(ench, level));
+                boolean disabled = meta.getPersistentDataContainer()
+                    .has(ench.getDisabledKey(), PersistentDataType.BYTE);
+                lore.add(0, formatLine(ench, level, disabled));
             }
         }
         meta.setLore(lore);
@@ -35,8 +37,16 @@ public final class EnchantmentLore {
 
     /** 生成附魔显示行 */
     public static String formatLine(CustomEnchantment ench, int level) {
-        return COLOR + ench.getDisplayName()
-            + (ench.getMaxLevel() > 1 ? " " + roman(level) : "");
+        return formatLine(ench, level, false);
+    }
+
+    /** 生成附魔显示行（含禁用态：删除线 + 置灰 + 已禁用标记） */
+    public static String formatLine(CustomEnchantment ench, int level, boolean disabled) {
+        String levelSuffix = ench.getMaxLevel() > 1 ? " " + roman(level) : "";
+        if (disabled) {
+            return "§8§m" + ench.getDisplayName() + levelSuffix + "§r §7(已禁用)";
+        }
+        return COLOR + ench.getDisplayName() + levelSuffix;
     }
 
     /** 判断某行是否为自定义附魔行 */

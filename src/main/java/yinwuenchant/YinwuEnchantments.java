@@ -1,6 +1,7 @@
 package yinwuenchant;
 
 import yinwuenchant.api.EnchantAPIImpl;
+import yinwuenchant.gui.EnchantmentToggleGUI;
 import yinwuenchant.manager.CommandHandler;
 import yinwuenchant.manager.ConfigManager;
 import yinwuenchant.manager.EnchantmentAcquisitionManager;
@@ -29,8 +30,9 @@ public final class YinwuEnchantments extends YinwuPlugin {
         configManager = new ConfigManager(this);
         enchantmentManager = new EnchantmentManager(this, configManager);
         acquisitionManager = new EnchantmentAcquisitionManager(this, enchantmentManager);
-        commandHandler = new CommandHandler(this, enchantmentManager, acquisitionManager, configManager);
-        eventListener = new EventListener(this, enchantmentManager);
+        EnchantmentToggleGUI toggleGui = new EnchantmentToggleGUI(this, enchantmentManager);
+        commandHandler = new CommandHandler(this, enchantmentManager, acquisitionManager, configManager, toggleGui);
+        eventListener = new EventListener(this, enchantmentManager, toggleGui);
 
         // 注册命令（Bukkit 插件用 getCommand）
         getCommand("ye").setExecutor(commandHandler);
