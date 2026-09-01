@@ -13,11 +13,11 @@
 
     <groupId>YinwuEnchant</groupId>
     <artifactId>YinwuEnchant</artifactId>
-    <version>1.2.4</version>
+    <version>1.2.5</version>
     <packaging>jar</packaging>
 
     <name>YinwuEnchant</name>
-    <description>21 custom enchantments (PDC-based) for Paper/Folia 1.21+, with per-item enchant toggle GUI</description>
+    <description>34 custom enchantments (PDC-based) for Paper/Folia 1.21+, with per-item enchant toggle GUI</description>
 
     <build>
         <defaultGoal>clean package</defaultGoal>
@@ -44,6 +44,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- JDK25 下 plexus in-process 编译有 ConcurrentModificationException bug，fork 外部 javac 绕过 -->
+                    <fork>true</fork>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

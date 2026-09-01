@@ -22,16 +22,16 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 二级界面：单物品自定义附魔独立开关。
- * slot 0 放入物品，右侧每个附魔占 2 格 = [附魔书+名字][开关图标]，点击图标切换。
+ * 二级界面：单物品自定义附魔独立开关（27 格优化版）。
+ * slot 0 放入物品，右侧每个附魔占 1 格按钮（名称+状态），点击切换启停；
+ * 诅咒类附魔显示锁定图标（BARRIER）不可关闭。
  * 对物品的修改直接写回输入格内的 ItemStack，关闭界面时归还玩家。
  */
 public class EnchantmentToggleGUI {
     private static final String TITLE = ChatColor.GOLD + "附魔开关";
     private static final int SIZE = 27;
     private static final int INPUT_SLOT = 0;
-    /** 每个附魔条目占 2 格：[附魔书+名字][开关图标] */
-    private static final int ENTRY_SLOTS = 2;
+    private static final int INSTRUCT_SLOT = SIZE - 1;
 
     private final YinwuEnchantments plugin;
     private final EnchantmentManager enchantmentManager;
@@ -41,7 +41,7 @@ public class EnchantmentToggleGUI {
 
     private static final class Session {
         final Inventory inv;
-        /** 开关图标槽位 → 附魔 */
+        /** 开关按钮槽位 → 附魔（诅咒不在其中，点击无效） */
         final Map<Integer, CustomEnchantment> toggleButtons = new HashMap<>();
         Session(Inventory inv) { this.inv = inv; }
     }
@@ -97,7 +97,7 @@ public class EnchantmentToggleGUI {
         if (session == null) return;
 
         CustomEnchantment ench = session.toggleButtons.get(rawSlot);
-        if (ench == null) return;
+        if (ench == null) return;   // 诅咒/填充格：点击无效
 
         ItemStack item = session.inv.getItem(INPUT_SLOT);
         if (item == null || item.getType() == Material.AIR) return;
@@ -146,12 +146,12 @@ public class EnchantmentToggleGUI {
         }, null, 1L);
     }
 
-    /** 重建右侧条目区（读输入格物品的 PDC，逐个附魔渲染书+开关图标） */
+    /** 重建右侧条目区（每个附魔 1 格按钮，诅咒锁定不可点） */
     private void refreshEntries(Session session) {
         Inventory inv = session.inv;
         session.toggleButtons.clear();
         for (int i = 1; i < SIZE; i++) inv.setItem(i, filler());
-        inv.setItem(SIZE - 1, instructions());
+        inv.setItem(INSTRUCT_SLOT, instructions());
 
         ItemStack item = inv.getItem(INPUT_SLOT);
         if (item == null || item.getType() == Material.AIR) {
@@ -168,46 +168,42 @@ public class EnchantmentToggleGUI {
         }
         int slot = 1;
         for (CustomEnchantment ench : present) {
-            if (slot + ENTRY_SLOTS - 1 >= SIZE) break;
+            if (slot >= INSTRUCT_SLOT) break;   // 保留最后格给说明
             boolean disabled = ench.isDisabled(item);
-            inv.setItem(slot, bookItem(ench, ench.getRawEnchantmentLevel(item), disabled));
-            inv.setItem(slot + 1, toggleIcon(disabled));
-            session.toggleButtons.put(slot + 1, ench);
-            slot += ENTRY_SLOTS;
+            inv.setItem(slot, enchantButton(ench, ench.getRawEnchantmentLevel(item), disabled));
+            if (!ench.isCursed()) {
+                session.toggleButtons.put(slot, ench);
+            }
+            slot++;
         }
     }
 
-    private static ItemStack bookItem(CustomEnchantment ench, int level, boolean disabled) {
-        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
-        ItemMeta meta = book.getItemMeta();
-        if (meta == null) return book;
+    /** 附魔条目按钮（单格）：正常附魔可开关，诅咒显示锁定不可关闭 */
+    private static ItemStack enchantButton(CustomEnchantment ench, int level, boolean disabled) {
         String base = EnchantmentGUI.chineseName(ench.getId());
         String levelSuffix = ench.getMaxLevel() > 1 ? " " + EnchantmentLore.roman(level) : "";
+        ItemStack button;
+        ItemMeta meta;
+        if (ench.isCursed()) {
+            button = new ItemStack(Material.BARRIER);
+            meta = button.getItemMeta();
+            if (meta == null) return button;
+            meta.setDisplayName(ChatColor.RED + base + levelSuffix);
+            meta.setLore(List.of(ChatColor.RED + "诅咒附魔，无法关闭"));
+            button.setItemMeta(meta);
+            return button;
+        }
+        button = new ItemStack(disabled ? Material.BOOK : Material.ENCHANTED_BOOK);
+        meta = button.getItemMeta();
+        if (meta == null) return button;
         meta.setDisplayName(disabled
-            ? ChatColor.GRAY + "" + ChatColor.STRIKETHROUGH + base + levelSuffix
+            ? ChatColor.RED + base + levelSuffix + ChatColor.GRAY + "（已关闭）"
             : ChatColor.GREEN + base + levelSuffix);
         meta.setLore(List.of(
-            disabled ? ChatColor.RED + "已禁用" : ChatColor.GREEN + "已启用",
+            disabled ? ChatColor.RED + "已关闭 · 点击开启" : ChatColor.GREEN + "已开启 · 点击关闭",
             ChatColor.DARK_GRAY + "ID: " + ench.getId()));
-        book.setItemMeta(meta);
-        return book;
-    }
-
-    /** 开关图标（随状态变色：绿=已开启，红=已关闭），点击即切换 */
-    private static ItemStack toggleIcon(boolean disabled) {
-        ItemStack icon = new ItemStack(disabled
-            ? Material.RED_STAINED_GLASS_PANE : Material.LIME_STAINED_GLASS_PANE);
-        ItemMeta meta = icon.getItemMeta();
-        if (meta == null) return icon;
-        if (disabled) {
-            meta.setDisplayName(ChatColor.RED + "已关闭");
-            meta.setLore(List.of(ChatColor.RED + "点击切换为开启"));
-        } else {
-            meta.setDisplayName(ChatColor.GREEN + "已开启");
-            meta.setLore(List.of(ChatColor.GREEN + "点击切换为关闭"));
-        }
-        icon.setItemMeta(meta);
-        return icon;
+        button.setItemMeta(meta);
+        return button;
     }
 
     private static ItemStack filler() {
@@ -247,7 +243,8 @@ public class EnchantmentToggleGUI {
             m.setDisplayName(ChatColor.AQUA + "操作说明");
             m.setLore(List.of(
                 ChatColor.GRAY + "放入物品自动检索附魔",
-                ChatColor.GRAY + "点击开关图标切换",
+                ChatColor.GRAY + "点击附魔按钮切换启停",
+                ChatColor.RED + "诅咒附魔不可关闭",
                 ChatColor.GRAY + "关闭界面后物品自动归还"));
             s.setItemMeta(m);
         }

@@ -4,6 +4,7 @@ import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.enchantments.CustomEnchantment;
 import yinwuenchant.manager.ConfigManager;
 import yinwuenchant.manager.EnchantmentManager;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
@@ -22,6 +23,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * 附魔目录 GUI（三页，精确分类）。
+ * 每页附魔集中在前 4 行（每行一个部位类别），第 5 行占位，第 6 行导航。
+ * 导航：左下角(45)=上一页、正中(49)=附魔开关、右下角(53)=下一页。
+ * 第 1 页：护甲（头盔/胸甲鞘翅/护腿/靴子）
+ * 第 2 页：武器/工具/杂项
+ * 第 3 页：诅咒
+ */
 public class EnchantmentGUI {
     private final YinwuEnchantments plugin;
     private final EnchantmentManager enchantmentManager;
@@ -31,84 +40,144 @@ public class EnchantmentGUI {
     private final Map<UUID, List<io.papermc.paper.threadedregions.scheduler.ScheduledTask>> cycleTasks =
         new ConcurrentHashMap<>();
 
-    private static final String TITLE = ChatColor.GOLD + "Yinwu附魔列表";
+    private static final String TITLE_BASE = ChatColor.GOLD + "Yinwu附魔列表";
+    private static final String TITLE_PAGE1 = TITLE_BASE + " §8(1/3)";
+    private static final String TITLE_PAGE2 = TITLE_BASE + " §8(2/3)";
+    private static final String TITLE_PAGE3 = TITLE_BASE + " §8(3/3)";
     private static final int SIZE = 54;
+    private static final int PREV_SLOT = 45;   // 左下角
+    private static final int TOGGLE_SLOT = 49; // 正中
+    private static final int NEXT_SLOT = 53;   // 右下角
 
-    private static final Map<String, Integer> SLOTS = Map.ofEntries(
-        // 第一行：头盔（标题格 0）
-        Map.entry("clearsight", 1), Map.entry("nasus", 2),
-        Map.entry("insomnia", 3), Map.entry("vampire_curse", 4),
-        // 第二行：胸甲/鞘翅（标题格 9）
-        Map.entry("sonic_boom", 10), Map.entry("bless", 11),
-        Map.entry("phantom", 12), Map.entry("airbag", 13),
-        // 第三行：护腿（标题格 18）
-        Map.entry("safefall", 19),
-        // 第四行：靴子（标题格 27）
-        Map.entry("darkspeed", 28), Map.entry("cats_paw", 29),
-        Map.entry("lava_walker", 30), Map.entry("step_up", 31),
-        // 第五行：武器（标题格 36）
-        Map.entry("master_of_beef_slicing", 37), Map.entry("resonate", 38),
-        // 第六行：工具（标题格 45）
-        Map.entry("undermine", 46), Map.entry("harvest", 47),
-        Map.entry("smelt", 48), Map.entry("emerald_till", 49),
-        Map.entry("shrieker_sense", 50), Map.entry("soulbound", 51)
+    /** 第 1 页：护甲（12 个，第 2~5 行按部位分类，第 1 行占位） */
+    private static final Map<String, Integer> SLOTS_PAGE1 = Map.ofEntries(
+        // 第 2 行：头盔
+        Map.entry("clearsight", 10), Map.entry("nasus", 11),
+        // 第 3 行：胸甲/鞘翅
+        Map.entry("sonic_boom", 19), Map.entry("bless", 20), Map.entry("phantom", 21),
+        Map.entry("airbag", 22), Map.entry("fury", 23),
+        // 第 4 行：护腿
+        Map.entry("safefall", 28),
+        // 第 5 行：靴子
+        Map.entry("darkspeed", 37), Map.entry("cats_paw", 38),
+        Map.entry("lava_walker", 39), Map.entry("step_up", 40)
     );
 
-    /** 每行类别标题格位 */
-    private static final Map<Integer, String> HEADERS = Map.of(
-        0, "头盔附魔", 9, "胸甲/鞘翅附魔", 18, "护腿附魔",
-        27, "靴子附魔", 36, "武器附魔", 45, "工具附魔"
+    /** 第 2 页：武器/工具/盾牌杂项（15 个，第 2~5 行，剑与弓弩分开） */
+    private static final Map<String, Integer> SLOTS_PAGE2 = Map.ofEntries(
+        // 第 2 行：近战武器（剑）
+        Map.entry("master_of_beef_slicing", 10), Map.entry("critical", 11),
+        Map.entry("life_steal", 12), Map.entry("poison_aspect", 13),
+        // 第 3 行：远程武器（弓/弩）
+        Map.entry("echo_shot", 19), Map.entry("storm_arrow", 20),
+        Map.entry("explosive_arrow", 21),
+        // 第 4 行：工具
+        Map.entry("undermine", 28), Map.entry("harvest", 29),
+        Map.entry("smelt", 30), Map.entry("emerald_till", 31),
+        Map.entry("shrieker_sense", 32), Map.entry("vein_miner", 33),
+        // 第 5 行：盾牌/杂项
+        Map.entry("resonate", 37), Map.entry("soulbound", 38)
     );
 
-    /** 每行标题玻璃板颜色（各不相同） */
+    /** 第 3 页：诅咒（7 个，第 2~5 行） */
+    private static final Map<String, Integer> SLOTS_PAGE3 = Map.ofEntries(
+        Map.entry("vampire_curse", 10), Map.entry("insomnia", 11),
+        Map.entry("dwarfed", 19), Map.entry("oversize", 20),
+        Map.entry("curse_of_clumsiness", 28),
+        Map.entry("curse_of_breaking", 37), Map.entry("curse_of_enchant", 38)
+    );
+
+    /** 每页类别标题（行起始格位 → 文本，第 1 行留空为占位） */
+    private static final Map<Integer, String> HEADERS_PAGE1 = Map.of(
+        9, "头盔附魔", 18, "胸甲/鞘翅附魔", 27, "护腿附魔", 36, "靴子附魔"
+    );
+    private static final Map<Integer, String> HEADERS_PAGE2 = Map.of(
+        9, "近战武器", 18, "远程武器（弓/弩）", 27, "工具", 36, "盾牌/杂项"
+    );
+    private static final Map<Integer, String> HEADERS_PAGE3 = Map.of(
+        9, "头盔诅咒", 18, "护腿诅咒", 27, "武器诅咒", 36, "工具诅咒"
+    );
+
+    /** 行起始格位 → 标题玻璃板颜色（第 2~5 行） */
     private static final Map<Integer, Material> HEADER_COLORS = Map.of(
-        0, Material.BLUE_STAINED_GLASS_PANE,
-        9, Material.RED_STAINED_GLASS_PANE,
-        18, Material.GREEN_STAINED_GLASS_PANE,
-        27, Material.YELLOW_STAINED_GLASS_PANE,
-        36, Material.ORANGE_STAINED_GLASS_PANE,
-        45, Material.PURPLE_STAINED_GLASS_PANE
+        9, Material.BLUE_STAINED_GLASS_PANE,
+        18, Material.RED_STAINED_GLASS_PANE,
+        27, Material.GREEN_STAINED_GLASS_PANE,
+        36, Material.YELLOW_STAINED_GLASS_PANE
     );
 
     public EnchantmentGUI(YinwuEnchantments plugin, EnchantmentManager em, ConfigManager cm) {
         this.plugin = plugin; this.enchantmentManager = em; this.configManager = cm;
     }
 
+    /** 打开第 1 页（护甲） */
     public void open(Player player) {
-        // 取消该玩家上一次打开的循环任务（防累积）
-        cancelCycles(player.getUniqueId());
-        Inventory inv = org.bukkit.Bukkit.createInventory(null, SIZE, TITLE);
-        String[] ids = enchantmentManager.getEnchantmentIds();
-
-        // 玻璃板底色
-        ItemStack filler = fillerItem();
-        for (int i = 0; i < SIZE; i++) inv.setItem(i, filler);
-
-        // 类别标题行
-        HEADERS.forEach((slot, name) -> inv.setItem(slot, headerItem(slot, name)));
-
-        // 附魔图标
-        for (String id : ids) {
-            Integer slot = SLOTS.get(id);
-            if (slot == null) continue;
-            CustomEnchantment ench = enchantmentManager.getEnchantment(id);
-            if (ench == null) continue;
-            ItemStack item = buildItem(id, ench);
-            if (item != null) inv.setItem(slot, item);
-        }
-
-        // 二级界面入口（slot 53）
-        inv.setItem(53, toggleEntryItem());
-
-        player.openInventory(inv);
-        startCycles(player, ids);
+        openPage(player, 1);
     }
 
-    private ItemStack fillerItem() {
-        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta fm = filler.getItemMeta();
-        if (fm != null) { fm.setDisplayName(" "); filler.setItemMeta(fm); }
-        return filler;
+    public void openPage(Player player, int page) {
+        cancelCycles(player.getUniqueId());
+        Map<String, Integer> slots = switch (page) {
+            case 2 -> SLOTS_PAGE2;
+            case 3 -> SLOTS_PAGE3;
+            default -> SLOTS_PAGE1;
+        };
+        Map<Integer, String> headers = switch (page) {
+            case 2 -> HEADERS_PAGE2;
+            case 3 -> HEADERS_PAGE3;
+            default -> HEADERS_PAGE1;
+        };
+        String title = switch (page) {
+            case 2 -> TITLE_PAGE2;
+            case 3 -> TITLE_PAGE3;
+            default -> TITLE_PAGE1;
+        };
+
+        Inventory inv = org.bukkit.Bukkit.createInventory(null, SIZE, title);
+
+        // 全背景占位符
+        ItemStack placeholder = placeholderItem();
+        for (int i = 0; i < SIZE; i++) inv.setItem(i, placeholder);
+
+        // 类别标题行
+        headers.forEach((slot, name) -> inv.setItem(slot, headerItem(slot, name)));
+
+        // 附魔图标
+        for (Map.Entry<String, Integer> e : slots.entrySet()) {
+            CustomEnchantment ench = enchantmentManager.getEnchantment(e.getKey());
+            if (ench == null) continue;
+            ItemStack item = buildItem(e.getKey(), ench);
+            if (item != null) inv.setItem(e.getValue(), item);
+        }
+
+        // 导航行：左下角上一页 / 正中附魔开关 / 右下角下一页
+        inv.setItem(PREV_SLOT, prevPageItem());
+        inv.setItem(TOGGLE_SLOT, toggleEntryItem());
+        inv.setItem(NEXT_SLOT, nextPageItem());
+
+        player.openInventory(inv);
+        startCycles(player, slots.keySet().toArray(new String[0]));
+    }
+
+    /** 从标题解析当前页码（1/2/3） */
+    public static int currentPage(String title) {
+        if (title == null) return 1;
+        int i = title.indexOf('(');
+        if (i >= 0) {
+            int j = title.indexOf('/', i);
+            if (j > i) {
+                try { return Integer.parseInt(title.substring(i + 1, j).trim()); } catch (NumberFormatException ignored) {}
+            }
+        }
+        return 1;
+    }
+
+    /** 背景占位符 */
+    private ItemStack placeholderItem() {
+        ItemStack item = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) { meta.setDisplayName(" "); item.setItemMeta(meta); }
+        return item;
     }
 
     private ItemStack headerItem(int slot, String name) {
@@ -122,9 +191,31 @@ public class EnchantmentGUI {
         return item;
     }
 
-    public static boolean matches(String title) { return TITLE.equals(title); }
+    /** 左下角：上一页 */
+    private ItemStack prevPageItem() {
+        ItemStack item = new ItemStack(Material.ARROW);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.YELLOW + "◂ 上一页");
+            meta.setLore(List.of(ChatColor.GRAY + "返回上一页附魔"));
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
 
-    /** 二级界面入口按钮（点击打开单物品附魔开关，由 EventListener 处理） */
+    /** 右下角：下一页 */
+    private ItemStack nextPageItem() {
+        ItemStack item = new ItemStack(Material.ARROW);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.YELLOW + "下一页 ▸");
+            meta.setLore(List.of(ChatColor.GRAY + "查看下一页附魔"));
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /** 正中：附魔开关入口 */
     private ItemStack toggleEntryItem() {
         ItemStack item = new ItemStack(Material.LEVER);
         ItemMeta meta = item.getItemMeta();
@@ -134,6 +225,10 @@ public class EnchantmentGUI {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    public static boolean matches(String title) {
+        return title != null && title.startsWith(TITLE_BASE);
     }
 
     private ItemStack buildItem(String id, CustomEnchantment ench) {
@@ -178,6 +273,20 @@ public class EnchantmentGUI {
             case "emerald_till" -> { l.add(lore("适用物品: 锄头")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 破坏草丛概率掉落绿宝石")); }
             case "step_up" -> { l.add(lore("适用物品: 靴子")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 提高步高，走上1格高方块")); }
             case "vampire_curse" -> { l.add(lore("适用物品: 头盔")); l.add(ChatColor.RED + "⚠ 负面附魔"); l.add(lore("附魔效果: 白天燃烧，夜晚回复+抗性")); }
+            // ==== NeoEnchant 移植 ====
+            case "vein_miner" -> { l.add(lore("适用物品: 镐")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 非潜行挖掘时连锁挖同矿")); l.add(lore("兼容附魔: 时运")); }
+            case "critical" -> { l.add(lore("适用物品: 剑")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 概率破甲25%")); }
+            case "life_steal" -> { l.add(lore("适用物品: 剑")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 攻击命中回复生命")); }
+            case "fury" -> { l.add(lore("适用物品: 盔甲")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 减护甲换增伤+破甲")); }
+            case "poison_aspect" -> { l.add(lore("适用物品: 剑")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 攻击使目标中毒")); }
+            case "echo_shot" -> { l.add(lore("适用物品: 弓/弩")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 箭命中产生音爆AOE")); }
+            case "storm_arrow" -> { l.add(lore("适用物品: 弓/弩")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 箭命中召唤闪电")); }
+            case "explosive_arrow" -> { l.add(lore("适用物品: 弓/弩")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 箭命中产生爆炸")); }
+            case "curse_of_breaking" -> { l.add(lore("适用物品: 耐久类")); l.add(ChatColor.RED + "⚠ 负面附魔"); l.add(lore("附魔效果: 耐久损耗加快")); }
+            case "curse_of_enchant" -> { l.add(lore("适用物品: 耐久类")); l.add(ChatColor.RED + "⚠ 负面附魔"); l.add(lore("附魔效果: 无法再附魔/铁砧修改")); }
+            case "curse_of_clumsiness" -> { l.add(lore("适用物品: 剑")); l.add(ChatColor.RED + "⚠ 负面附魔"); l.add(lore("附魔效果: 削弱武器伤害")); }
+            case "dwarfed" -> { l.add(lore("适用物品: 护腿")); l.add(ChatColor.RED + "⚠ 负面附魔"); l.add(lore("附魔效果: 体型缩小+攻击削弱")); }
+            case "oversize" -> { l.add(lore("适用物品: 护腿")); l.add(ChatColor.RED + "⚠ 负面附魔"); l.add(lore("附魔效果: 体型变大")); }
             default -> {
                 l.add(lore("ID: " + ench.getId()));
                 l.add(lore("最大等级: " + ench.getMaxLevel()));
@@ -191,10 +300,18 @@ public class EnchantmentGUI {
 
     private void startCycles(Player player, String[] ids) {
         for (String id : ids) {
-            Integer slot = SLOTS.get(id);
+            Integer slot = slotOf(id);
             if (slot == null) continue;
             startCycle(player, slot, id);
         }
+    }
+
+    private static Integer slotOf(String id) {
+        Integer s = SLOTS_PAGE1.get(id);
+        if (s != null) return s;
+        s = SLOTS_PAGE2.get(id);
+        if (s != null) return s;
+        return SLOTS_PAGE3.get(id);
     }
 
     private void startCycle(Player player, int slot, String id) {
@@ -206,7 +323,7 @@ public class EnchantmentGUI {
         AtomicInteger idx = new AtomicInteger(ThreadLocalRandom.current().nextInt(items.length));
         io.papermc.paper.threadedregions.scheduler.ScheduledTask scheduled =
             player.getScheduler().runAtFixedRate(plugin, (task) -> {
-            if (!player.isOnline() || !TITLE.equals(player.getOpenInventory().getTitle())) {
+            if (!player.isOnline() || !matches(player.getOpenInventory().getTitle())) {
                 task.cancel();
                 cycleTasks.computeIfPresent(player.getUniqueId(), (k, list) -> {
                     list.remove(task);
@@ -251,7 +368,15 @@ public class EnchantmentGUI {
             case "bless" -> Material.TOTEM_OF_UNDYING; case "vampire_curse" -> Material.ZOMBIE_HEAD;
             case "insomnia" -> Material.CLOCK; case "smelt" -> Material.FURNACE;
             case "lava_walker" -> Material.MAGMA_BLOCK; case "emerald_till" -> Material.DIAMOND_HOE;
-            case "step_up" -> Material.IRON_BOOTS; default -> Material.PAPER;
+            case "step_up" -> Material.IRON_BOOTS;
+            // NeoEnchant 移植
+            case "vein_miner" -> Material.DIAMOND_PICKAXE; case "critical" -> Material.DIAMOND_SWORD;
+            case "life_steal" -> Material.NETHERITE_SWORD; case "fury" -> Material.NETHERITE_CHESTPLATE;
+            case "poison_aspect" -> Material.POISONOUS_POTATO; case "echo_shot" -> Material.BOW;
+            case "storm_arrow" -> Material.LIGHTNING_ROD; case "explosive_arrow" -> Material.TNT;
+            case "curse_of_breaking" -> Material.CHIPPED_ANVIL; case "curse_of_enchant" -> Material.ENCHANTED_BOOK;
+            case "curse_of_clumsiness" -> Material.WOODEN_SWORD; case "dwarfed" -> Material.RABBIT_FOOT;
+            case "oversize" -> Material.ANVIL; default -> Material.PAPER;
         };
     }
 
@@ -267,36 +392,15 @@ public class EnchantmentGUI {
             case "vampire_curse" -> "吸血鬼诅咒"; case "insomnia" -> "失眠";
             case "soulbound" -> "灵魂绑定"; case "smelt" -> "熔化";
             case "lava_walker" -> "熔岩行者"; case "emerald_till" -> "拾翠";
-            case "step_up" -> "马蹄"; default -> id;
-        };
-    }
-
-    static String materialChineseName(Material mat) {
-        return switch (mat) {
-            case LEATHER_HELMET -> "皮革头盔"; case CHAINMAIL_HELMET -> "锁链头盔";
-            case IRON_HELMET -> "铁头盔"; case GOLDEN_HELMET -> "金头盔";
-            case DIAMOND_HELMET -> "钻石头盔"; case NETHERITE_HELMET -> "下界合金头盔";
-            case TURTLE_HELMET -> "海龟壳";
-            case LEATHER_CHESTPLATE -> "皮革胸甲"; case CHAINMAIL_CHESTPLATE -> "锁链胸甲";
-            case IRON_CHESTPLATE -> "铁胸甲"; case GOLDEN_CHESTPLATE -> "金胸甲";
-            case DIAMOND_CHESTPLATE -> "钻石胸甲"; case NETHERITE_CHESTPLATE -> "下界合金胸甲";
-            case LEATHER_LEGGINGS -> "皮革护腿"; case CHAINMAIL_LEGGINGS -> "锁链护腿";
-            case IRON_LEGGINGS -> "铁护腿"; case GOLDEN_LEGGINGS -> "金护腿";
-            case DIAMOND_LEGGINGS -> "钻石护腿"; case NETHERITE_LEGGINGS -> "下界合金护腿";
-            case LEATHER_BOOTS -> "皮革靴子"; case CHAINMAIL_BOOTS -> "锁链靴子";
-            case IRON_BOOTS -> "铁靴子"; case GOLDEN_BOOTS -> "金靴子";
-            case DIAMOND_BOOTS -> "钻石靴子"; case NETHERITE_BOOTS -> "下界合金靴子";
-            case WOODEN_PICKAXE -> "木镐"; case STONE_PICKAXE -> "石镐";
-            case IRON_PICKAXE -> "铁镐"; case GOLDEN_PICKAXE -> "金镐";
-            case DIAMOND_PICKAXE -> "钻石镐"; case NETHERITE_PICKAXE -> "下界合金镐";
-            case WOODEN_AXE -> "木斧"; case STONE_AXE -> "石斧";
-            case IRON_AXE -> "铁斧"; case GOLDEN_AXE -> "金斧";
-            case DIAMOND_AXE -> "钻石斧"; case NETHERITE_AXE -> "下界合金斧";
-            case WOODEN_SHOVEL -> "木锹"; case STONE_SHOVEL -> "石锹";
-            case IRON_SHOVEL -> "铁锹"; case GOLDEN_SHOVEL -> "金锹";
-            case DIAMOND_SHOVEL -> "钻石锹"; case NETHERITE_SHOVEL -> "下界合金锹";
-            case SHIELD -> "盾牌";
-            default -> mat.name().toLowerCase().replace("_", " ");
+            case "step_up" -> "马蹄";
+            // NeoEnchant 移植
+            case "vein_miner" -> "连锁挖矿"; case "critical" -> "暴击";
+            case "life_steal" -> "生命汲取"; case "fury" -> "狂怒";
+            case "poison_aspect" -> "毒素"; case "echo_shot" -> "回声射击";
+            case "storm_arrow" -> "风暴之箭"; case "explosive_arrow" -> "爆炸之箭";
+            case "curse_of_breaking" -> "脆弱诅咒"; case "curse_of_enchant" -> "附魔诅咒";
+            case "curse_of_clumsiness" -> "笨拙诅咒"; case "dwarfed" -> "矮人化";
+            case "oversize" -> "巨人化"; default -> id;
         };
     }
 

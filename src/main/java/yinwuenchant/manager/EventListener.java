@@ -3,6 +3,7 @@ package yinwuenchant.manager;
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.enchantments.CustomEnchantment;
 import yinwuenchant.enchantments.ShriekerSense;
+import yinwuenchant.gui.EnchantmentGUI;
 import yinwuenchant.gui.EnchantmentToggleGUI;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -15,11 +16,14 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -30,12 +34,14 @@ public class EventListener implements Listener {
     private final YinwuEnchantments plugin;
     private final EnchantmentManager enchantmentManager;
     private final EnchantmentToggleGUI toggleGui;
+    private final EnchantmentGUI gui;
 
     public EventListener(YinwuEnchantments plugin, EnchantmentManager enchantmentManager,
-                         EnchantmentToggleGUI toggleGui) {
+                         EnchantmentToggleGUI toggleGui, EnchantmentGUI gui) {
         this.plugin = plugin;
         this.enchantmentManager = enchantmentManager;
         this.toggleGui = toggleGui;
+        this.gui = gui;
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
@@ -66,6 +72,21 @@ public class EventListener implements Listener {
 
     @EventHandler
     public void onEntityDamage(EntityDamageEvent event) {
+        enchantmentManager.dispatchEvent(event);
+    }
+
+    @EventHandler
+    public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        enchantmentManager.dispatchEvent(event);
+    }
+
+    @EventHandler
+    public void onPlayerItemDamage(PlayerItemDamageEvent event) {
+        enchantmentManager.dispatchEvent(event);
+    }
+
+    @EventHandler
+    public void onProjectileHit(ProjectileHitEvent event) {
         enchantmentManager.dispatchEvent(event);
     }
 
@@ -121,10 +142,18 @@ public class EventListener implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         String title = event.getView().getTitle();
 
-        // 一级目录：slot 53 进入二级界面
-        if (title.contains("Yinwu附魔列表")) {
+        // 一级目录（三页）：左下角45=上一页、正中49=附魔开关、右下角53=下一页
+        if (EnchantmentGUI.matches(title)) {
             event.setCancelled(true);
-            if (event.getRawSlot() == 53) {
+            int slot = event.getRawSlot();
+            int page = EnchantmentGUI.currentPage(title);
+            if (slot == 45) {
+                int target = Math.max(1, page - 1);
+                player.getScheduler().run(plugin, (t) -> gui.openPage(player, target), null);
+            } else if (slot == 53) {
+                int target = Math.min(3, page + 1);
+                player.getScheduler().run(plugin, (t) -> gui.openPage(player, target), null);
+            } else if (slot == 49) {
                 player.getScheduler().run(plugin, (t) -> toggleGui.open(player), null);
             }
             return;

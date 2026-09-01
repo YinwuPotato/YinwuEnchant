@@ -1,12 +1,14 @@
 package yinwuenchant;
 
 import yinwuenchant.api.EnchantAPIImpl;
+import yinwuenchant.gui.EnchantmentGUI;
 import yinwuenchant.gui.EnchantmentToggleGUI;
 import yinwuenchant.manager.CommandHandler;
 import yinwuenchant.manager.ConfigManager;
 import yinwuenchant.manager.EnchantmentAcquisitionManager;
 import yinwuenchant.manager.EnchantmentManager;
 import yinwuenchant.manager.EventListener;
+import yinwuenchant.manager.PlayerEnchantCache;
 import net.yinwu.lib.api.EnchantAPI;
 import net.yinwu.lib.plugin.YinwuPlugin;
 import org.bukkit.Bukkit;
@@ -18,6 +20,7 @@ public final class YinwuEnchantments extends YinwuPlugin {
     private EnchantmentAcquisitionManager acquisitionManager;
     private CommandHandler commandHandler;
     private EventListener eventListener;
+    private PlayerEnchantCache enchantCache;
 
     @Override
     public String name() {
@@ -31,8 +34,9 @@ public final class YinwuEnchantments extends YinwuPlugin {
         enchantmentManager = new EnchantmentManager(this, configManager);
         acquisitionManager = new EnchantmentAcquisitionManager(this, enchantmentManager);
         EnchantmentToggleGUI toggleGui = new EnchantmentToggleGUI(this, enchantmentManager);
-        commandHandler = new CommandHandler(this, enchantmentManager, acquisitionManager, configManager, toggleGui);
-        eventListener = new EventListener(this, enchantmentManager, toggleGui);
+        EnchantmentGUI gui = new EnchantmentGUI(this, enchantmentManager, configManager);
+        commandHandler = new CommandHandler(this, enchantmentManager, acquisitionManager, configManager, toggleGui, gui);
+        eventListener = new EventListener(this, enchantmentManager, toggleGui, gui);
 
         // 注册命令（Bukkit 插件用 getCommand）
         getCommand("ye").setExecutor(commandHandler);
@@ -40,6 +44,10 @@ public final class YinwuEnchantments extends YinwuPlugin {
 
         // 启用所有附魔
         enchantmentManager.enableAll();
+
+        // 攻击附魔主手/护甲等级缓存（Folia 安全，附魔事件同步查缓存）
+        enchantCache = new PlayerEnchantCache(this);
+        enchantCache.start();
 
         // 注册 EnchantAPI 服务（供其他 Yinwu 插件调用）
         Bukkit.getServicesManager().register(EnchantAPI.class,
@@ -55,6 +63,9 @@ public final class YinwuEnchantments extends YinwuPlugin {
 
     @Override
     public void disable() {
+        if (enchantCache != null) {
+            enchantCache.stop();
+        }
         if (enchantmentManager != null) {
             enchantmentManager.disableAll();
         }
@@ -63,4 +74,5 @@ public final class YinwuEnchantments extends YinwuPlugin {
     public ConfigManager getConfigManager() { return configManager; }
     public EnchantmentManager getEnchantmentManager() { return enchantmentManager; }
     public EnchantmentAcquisitionManager getAcquisitionManager() { return acquisitionManager; }
+    public PlayerEnchantCache getEnchantCache() { return enchantCache; }
 }

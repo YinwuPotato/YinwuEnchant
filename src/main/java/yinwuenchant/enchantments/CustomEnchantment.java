@@ -117,6 +117,7 @@ public abstract class CustomEnchantment {
      */
     public ItemStack setDisabled(ItemStack item, boolean disabled) {
         if (item == null || !item.hasItemMeta()) return item;
+        if (isCursed() && disabled) return item;             // 诅咒无法关闭
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
         var pdc = meta.getPersistentDataContainer();
@@ -186,6 +187,11 @@ public abstract class CustomEnchantment {
      */
     public org.bukkit.enchantments.Enchantment[] getExclusiveEnchantments() {
         return new org.bukkit.enchantments.Enchantment[0];
+    }
+
+    /** 是否为负面/诅咒附魔（默认 false）。诅咒附魔 lore 用红色、获取走负面高概率。 */
+    public boolean isCursed() {
+        return false;
     }
 
     protected String getRomanNumeral(int number) {

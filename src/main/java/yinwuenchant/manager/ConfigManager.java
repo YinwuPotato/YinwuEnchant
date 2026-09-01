@@ -24,6 +24,12 @@ public class ConfigManager {
         plugin.reloadConfig();
         config = plugin.getConfig();
 
+        // 附魔 lore 颜色（视觉仿原版附魔行：正常附魔蓝、诅咒附魔红）
+        EnchantmentLore.setColors(
+            config.getString("lore-color", "&9"),
+            config.getString("curse-lore-color", "&c")
+        );
+
         // 清空缓存
         enchantmentEnabled.clear();
         settings.clear();
@@ -116,6 +122,34 @@ public class ConfigManager {
         enchantmentEnabled.put("step_up", config.getBoolean("enchantments.step_up.enabled", true));
         // LavaWalker（熔岩行者）
         enchantmentEnabled.put("lava_walker", config.getBoolean("enchantments.lava_walker.enabled", true));
+
+        // ==== NeoEnchant 移植附魔（13 个，正向 8 + 诅咒 5）====
+        enchantmentEnabled.put("vein_miner", config.getBoolean("enchantments.vein_miner.enabled", true));
+        enchantmentEnabled.put("critical", config.getBoolean("enchantments.critical.enabled", true));
+        enchantmentEnabled.put("life_steal", config.getBoolean("enchantments.life_steal.enabled", true));
+        enchantmentEnabled.put("fury", config.getBoolean("enchantments.fury.enabled", true));
+        enchantmentEnabled.put("poison_aspect", config.getBoolean("enchantments.poison_aspect.enabled", true));
+        enchantmentEnabled.put("echo_shot", config.getBoolean("enchantments.echo_shot.enabled", true));
+        enchantmentEnabled.put("storm_arrow", config.getBoolean("enchantments.storm_arrow.enabled", true));
+        enchantmentEnabled.put("explosive_arrow", config.getBoolean("enchantments.explosive_arrow.enabled", true));
+        enchantmentEnabled.put("curse_of_breaking", config.getBoolean("enchantments.curse_of_breaking.enabled", true));
+        enchantmentEnabled.put("curse_of_enchant", config.getBoolean("enchantments.curse_of_enchant.enabled", true));
+        enchantmentEnabled.put("curse_of_clumsiness", config.getBoolean("enchantments.curse_of_clumsiness.enabled", true));
+        enchantmentEnabled.put("dwarfed", config.getBoolean("enchantments.dwarfed.enabled", true));
+        enchantmentEnabled.put("oversize", config.getBoolean("enchantments.oversize.enabled", true));
+
+        // NeoEnchant 移植附魔的具体参数（不缓存则 getInt/getBoolean 兜底值会错）
+        settings.put("vein_miner.max-blocks", config.getInt("enchantments.vein_miner.max-blocks", 32));
+        settings.put("critical.chance-per-level", config.getDouble("enchantments.critical.chance-per-level", 0.04));
+        settings.put("critical.armor-penetration", config.getDouble("enchantments.critical.armor-penetration", 0.25));
+        settings.put("echo_shot.damage", config.getDouble("enchantments.echo_shot.damage", 6.0));
+        settings.put("storm_arrow.radius", config.getDouble("enchantments.storm_arrow.radius", 3.0));
+        settings.put("storm_arrow.damage", config.getDouble("enchantments.storm_arrow.damage", 5.0));
+        settings.put("storm_arrow.cooldown", config.getInt("enchantments.storm_arrow.cooldown", 3));
+        settings.put("storm_arrow.bolt-count", config.getInt("enchantments.storm_arrow.bolt-count", 4));
+        settings.put("explosive_arrow.power", config.getDouble("enchantments.explosive_arrow.power", 2.0));
+        settings.put("explosive_arrow.break-blocks", config.getBoolean("enchantments.explosive_arrow.break-blocks", false));
+        settings.put("explosive_arrow.set-fire", config.getBoolean("enchantments.explosive_arrow.set-fire", false));
 
         // 调试模式
         settings.put("debug", config.getBoolean("debug", false));

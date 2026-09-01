@@ -9,8 +9,8 @@
   <groupId>YinwuEnchant</groupId>
   <artifactId>YinwuEnchant</artifactId>
   <name>YinwuEnchant</name>
-  <version>1.2.4</version>
-  <description>21 custom enchantments (PDC-based) for Paper/Folia 1.21+, with per-item enchant toggle GUI</description>
+  <version>1.2.5</version>
+  <description>34 custom enchantments (PDC-based) for Paper/Folia 1.21+, with per-item enchant toggle GUI</description>
   <build>
     <defaultGoal>clean package</defaultGoal>
     <resources>
@@ -32,6 +32,9 @@
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <fork>true</fork>
+        </configuration>
       </plugin>
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>

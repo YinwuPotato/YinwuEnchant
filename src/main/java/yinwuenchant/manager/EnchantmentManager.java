@@ -8,7 +8,20 @@ import yinwuenchant.enchantments.Insomnia;
 import yinwuenchant.enchantments.LavaWalker;
 import yinwuenchant.enchantments.VampireCurse;
 import yinwuenchant.enchantments.Clearsight;
+import yinwuenchant.enchantments.Critical;
+import yinwuenchant.enchantments.CurseOfBreaking;
+import yinwuenchant.enchantments.CurseOfClumsiness;
+import yinwuenchant.enchantments.CurseOfEnchant;
 import yinwuenchant.enchantments.CustomEnchantment;
+import yinwuenchant.enchantments.Dwarfed;
+import yinwuenchant.enchantments.EchoShot;
+import yinwuenchant.enchantments.ExplosiveArrow;
+import yinwuenchant.enchantments.Fury;
+import yinwuenchant.enchantments.LifeSteal;
+import yinwuenchant.enchantments.Oversize;
+import yinwuenchant.enchantments.PoisonAspect;
+import yinwuenchant.enchantments.StormArrow;
+import yinwuenchant.enchantments.VeinMiner;
 import yinwuenchant.enchantments.Darkspeed;
 import yinwuenchant.enchantments.EmeraldTill;
 import yinwuenchant.enchantments.Harvest;
@@ -99,6 +112,21 @@ public class EnchantmentManager {
         enchantments.put("smelt", new Smelt(plugin));
         enchantments.put("step_up", new StepUp(plugin));
         enchantments.put("lava_walker", new LavaWalker(plugin));
+
+        // ==== NeoEnchant 移植（13 个：正向 8 + 诅咒 5）====
+        enchantments.put("vein_miner", new VeinMiner(plugin));
+        enchantments.put("critical", new Critical(plugin));
+        enchantments.put("life_steal", new LifeSteal(plugin));
+        enchantments.put("fury", new Fury(plugin));
+        enchantments.put("poison_aspect", new PoisonAspect(plugin));
+        enchantments.put("echo_shot", new EchoShot(plugin));
+        enchantments.put("storm_arrow", new StormArrow(plugin));
+        enchantments.put("explosive_arrow", new ExplosiveArrow(plugin));
+        enchantments.put("curse_of_breaking", new CurseOfBreaking(plugin));
+        enchantments.put("curse_of_enchant", new CurseOfEnchant(plugin));
+        enchantments.put("curse_of_clumsiness", new CurseOfClumsiness(plugin));
+        enchantments.put("dwarfed", new Dwarfed(plugin));
+        enchantments.put("oversize", new Oversize(plugin));
     }
 
     public void enableAll() {

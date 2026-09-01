@@ -2,7 +2,7 @@
 # YinwuEnchant 配置文件
 # =========================================
 # 插件版本: 1.1.1
-# 附魔数量: 21个自定义附魔
+# 附魔数量: 34个自定义附魔（21 原版 + 13 NeoEnchant 移植）
 #
 # 附魔列表:
 # 1. 猫爪 (cats_paw) - 击退周围苦力怕
@@ -26,6 +26,21 @@
 # 19. 熔岩行者 (lava_walker) - 行走时将脚下熔岩临时替换为岩浆块，搭配冰霜行者可水陆无伤
 # 20. 拾翠 (emerald_till) - 用锄头破坏草丛/蕨/枯灌木概率掉落绿宝石，时运加成
 # 21. 马蹄 (step_up) - 提高步高，可直接走上1格高方块
+#
+# ---- NeoEnchant 移植（22-34）----
+# 22. 连锁挖矿 (vein_miner) - 非潜行挖掘时连锁挖同矿脉
+# 23. 暴击 (critical) - 概率破甲25%
+# 24. 生命汲取 (life_steal) - 攻击命中回复生命
+# 25. 狂怒 (fury) - 减护甲换增伤+破甲
+# 26. 毒素 (poison_aspect) - 攻击使目标中毒
+# 27. 回声射击 (echo_shot) - 箭命中产生音爆AOE
+# 28. 风暴之箭 (storm_arrow) - 箭命中召唤闪电
+# 29. 爆炸之箭 (explosive_arrow) - 箭命中产生爆炸
+# 30. 脆弱诅咒 (curse_of_breaking) - 耐久损耗加快（负面）
+# 31. 附魔诅咒 (curse_of_enchant) - 无法再附魔/铁砧修改（负面）
+# 32. 笨拙诅咒 (curse_of_clumsiness) - 削弱武器伤害（负面）
+# 33. 矮人化 (dwarfed) - 体型缩小+攻击削弱（负面）
+# 34. 巨人化 (oversize) - 体型变大（负面）
 #
 # =========================================
 # 其他插件API调用方法
@@ -206,6 +221,61 @@ enchantments:
     step-height-level-1: 1.0
     # 2级步高
     step-height-level-2: 1.25
+  # ==== NeoEnchant 移植 ====
+  vein_miner:
+    enabled: true
+    # 连锁方块数量上限（防大矿脉卡服）
+    max-blocks: 32
+  critical:
+    enabled: true
+    # 每级触发概率（4%/级）
+    chance-per-level: 0.04
+    # 破甲比例（25%）
+    armor-penetration: 0.25
+  life_steal:
+    enabled: true
+  fury:
+    enabled: true
+  poison_aspect:
+    enabled: true
+  echo_shot:
+    enabled: true
+    # 基础伤害（每级再 +2）
+    damage: 6.0
+  storm_arrow:
+    enabled: true
+    # 视觉闪电 + 自控 AoE 伤害（不烧/不炸地形，也不会把村民变女巫）
+    # 伤害半径（格）
+    radius: 3.0
+    # AoE 伤害（伤害点数，原版闪电约 5.0 = 2.5❤）
+    damage: 5.0
+    # 连续触发冷却（秒），防无脑连射/多重射击刷雷
+    cooldown: 3
+    # 生效范围内撒的视觉闪电道数（含中心 1 道）
+    bolt-count: 4
+  explosive_arrow:
+    enabled: true
+    # 基础爆炸威力（每级再 +0.5）
+    power: 2.0
+    # 是否引燃方块
+    set-fire: false
+    # 是否破坏方块（默认关，防炸毁建筑）
+    break-blocks: false
+  curse_of_breaking:
+    enabled: true
+  curse_of_enchant:
+    enabled: true
+  curse_of_clumsiness:
+    enabled: true
+  dwarfed:
+    enabled: true
+  oversize:
+    enabled: true
+
+# 附魔 lore 行颜色（视觉仿原版附魔行）
+# 正常附魔默认原版附魔蓝，诅咒附魔默认红色
+lore-color: '&9'
+curse-lore-color: '&c'
 
 # 附魔获取设置 — 按附魔分组，未列出的附魔无获取途径
 # 每项都可配：mob-drops（击杀掉落）、fishing（钓鱼）、loot-tables（战利品箱）
@@ -313,13 +383,107 @@ acquisition:
         chance: 0.02
         level-min: 1
         level-max: 1
+  # ==== NeoEnchant 移植掉落 ====
+  vein_miner:
+    enabled: true
+    mob-drops:
+      - entity: IRON_GOLEM
+        chance: 0.05
+        level-min: 1
+        level-max: 1
+  critical:
+    enabled: true
+    mob-drops:
+      - entity: VINDICATOR
+        chance: 0.05
+        level-min: 1
+        level-max: 4
+  life_steal:
+    enabled: true
+    mob-drops:
+      - entity: WITCH
+        chance: 0.05
+        level-min: 1
+        level-max: 3
+  fury:
+    enabled: true
+    mob-drops:
+      - entity: PIGLIN_BRUTE
+        chance: 0.05
+        level-min: 1
+        level-max: 3
+  poison_aspect:
+    enabled: true
+    mob-drops:
+      - entity: CAVE_SPIDER
+        chance: 0.05
+        level-min: 1
+        level-max: 3
+  echo_shot:
+    enabled: true
+    mob-drops:
+      - entity: WARDEN
+        chance: 0.05
+        level-min: 1
+        level-max: 2
+  storm_arrow:
+    enabled: true
+    mob-drops:
+      - entity: DROWNED
+        chance: 0.05
+        level-min: 1
+        level-max: 1
+  explosive_arrow:
+    enabled: true
+    mob-drops:
+      - entity: CREEPER
+        chance: 0.05
+        level-min: 1
+        level-max: 4
+  curse_of_breaking:
+    enabled: true
+    mob-drops:
+      - entity: IRON_GOLEM
+        chance: 0.30
+        level-min: 1
+        level-max: 5
+  curse_of_enchant:
+    enabled: true
+    mob-drops:
+      - entity: EVOKER
+        chance: 0.30
+        level-min: 1
+        level-max: 1
+  curse_of_clumsiness:
+    enabled: true
+    mob-drops:
+      - entity: ZOMBIE
+        chance: 0.30
+        level-min: 1
+        level-max: 3
+  dwarfed:
+    enabled: true
+    mob-drops:
+      - entity: SLIME
+        chance: 0.30
+        level-min: 1
+        level-max: 5
+  oversize:
+    enabled: true
+    mob-drops:
+      - entity: MAGMA_CUBE
+        chance: 0.30
+        level-min: 1
+        level-max: 4
 
 # 附魔台模拟 — 自定义附魔进入附魔台
 enchanting-table:
   enabled: true
-  # 每次附魔出现自定义附魔的概率 (0-1)
+  # 每次附魔出现自定义附魔的概率 (0-1)，概率触发不保证必出
   chance: 0.02
-  # 出现的自定义附魔数量范围
+  # 是否允许诅咒附魔从附魔台出
+  include-curses: true
+  # 出现的自定义附魔数量范围（当前固定 1）
   count-min: 1
   count-max: 1
 

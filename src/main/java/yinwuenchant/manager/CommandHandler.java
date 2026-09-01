@@ -27,12 +27,12 @@ public class CommandHandler implements TabExecutor {
     private final EnchantmentToggleGUI toggleGui;
 
     public CommandHandler(YinwuEnchantments plugin, EnchantmentManager em, EnchantmentAcquisitionManager am,
-                          ConfigManager cm, EnchantmentToggleGUI toggleGui) {
+                          ConfigManager cm, EnchantmentToggleGUI toggleGui, EnchantmentGUI gui) {
         this.plugin = plugin;
         this.enchantmentManager = em;
         this.acquisitionManager = am;
         this.configManager = cm;
-        this.gui = new EnchantmentGUI(plugin, em, cm);
+        this.gui = gui;
         this.toggleGui = toggleGui;
     }
 

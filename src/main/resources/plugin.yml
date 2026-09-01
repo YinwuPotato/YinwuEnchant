@@ -4,7 +4,7 @@ main: yinwuenchant.YinwuEnchantments
 api-version: '1.21'
 folia-supported: true
 authors: ['qumingjam']
-description: '添加十一个独特的自定义附魔：猫爪、狗头、切肉大师、明目、黑暗行者、共振、外骨骼、幽匿探测、音波爆裂、深层矿工、幻影守护者'
+description: '34 个自定义附魔（含 NeoEnchant 移植）：攻击/工具/弓/负面诅咒，附魔台概率获取 + 铁砧合并，每物品独立开关'
 commands:
     yinwuenchant:
         description: '自定义附魔插件主命令'

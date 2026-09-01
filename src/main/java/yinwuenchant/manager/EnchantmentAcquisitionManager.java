@@ -3,7 +3,9 @@ package yinwuenchant.manager;
 import yinwuenchant.YinwuEnchantments;
 import yinwuenchant.enchantments.CustomEnchantment;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -30,6 +32,20 @@ public class EnchantmentAcquisitionManager implements Listener {
     private record MobDrop(String entity, double chance, int levelMin, int levelMax) {}
     private record FishingAcq(double chance, int levelMin, int levelMax) {}
     private record EnchantAcq(boolean enabled, List<MobDrop> mobDrops, FishingAcq fishing) {}
+
+    /**
+     * Deeper Dark 数据包注册的原版附魔 key → YinwuEnchant 附魔 id。
+     * 数据包附魔在 Folia 上不生效（tick 函数不执行），在铁砧/附魔台拦截并转成 PDC 附魔。
+     */
+    private static final Map<String, String> DEEPER_DARK_MAP = Map.ofEntries(
+        Map.entry("deeper_dark:clearsight", "clearsight"),
+        Map.entry("deeper_dark:darkspeed", "darkspeed"),
+        Map.entry("deeper_dark:resonate", "resonate"),
+        Map.entry("deeper_dark:safefall", "safefall"),
+        Map.entry("deeper_dark:shrieker_sense", "shrieker_sense"),
+        Map.entry("deeper_dark:sonic_boom", "sonic_boom"),
+        Map.entry("deeper_dark:undermine", "undermine")
+    );
 
     public EnchantmentAcquisitionManager(YinwuEnchantments plugin, EnchantmentManager enchantmentManager) {
         this.plugin = plugin;
@@ -150,14 +166,43 @@ public class EnchantmentAcquisitionManager implements Listener {
 
     // ==================== 附魔台模拟 ====================
 
+    /**
+     * 附魔台模拟 —— 概率性附加自定义附魔（不保证必出）。
+     * 全部附魔按稀有度权重挑 1 个，等级按 1/level 递减权重；诅咒默认可出，可配关闭。
+     * 物品带「附魔诅咒」则整个附魔取消（含原版附魔）。
+     */
     @EventHandler
     public void onEnchantItem(EnchantItemEvent event) {
         if (!plugin.getConfig().getBoolean("enchanting-table.enabled", true)) return;
         ItemStack item = event.getItem();
         if (item == null) return;
 
+        // 附魔诅咒：物品无法再附魔（连同原版一起取消；仅在该附魔启用时生效）
+        CustomEnchantment curse = enchantmentManager.getEnchantment("curse_of_enchant");
+        if (curse != null && plugin.getConfigManager().isEnchantmentEnabled("curse_of_enchant")
+                && curse.hasEnchantment(item)) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // 附魔台 roll 到 deeper_dark 数据包附魔（Folia 上不生效）→ 转成 YinwuEnchant PDC 附魔
+        Map<Enchantment, Integer> toAdd = event.getEnchantsToAdd();
+        List<Enchantment> dd = new ArrayList<>();
+        for (Enchantment e : toAdd.keySet()) {
+            if (DEEPER_DARK_MAP.containsKey(e.getKey().asString())) dd.add(e);
+        }
+        for (Enchantment e : dd) {
+            String id = DEEPER_DARK_MAP.get(e.getKey().asString());
+            int lvl = toAdd.remove(e);
+            CustomEnchantment ench = enchantmentManager.getEnchantment(id);
+            if (ench != null && ench.canApplyTo(item)) ench.applyEnchantment(item, Math.max(1, lvl));
+        }
+
+        boolean includeCurses = plugin.getConfig().getBoolean("enchanting-table.include-curses", true);
+
         List<CustomEnchantment> applicable = new ArrayList<>();
         for (CustomEnchantment ench : enchantmentManager.getAllEnchantments().values()) {
+            if (!includeCurses && ench.isCursed()) continue;
             if (ench.canApplyTo(item) && !ench.hasEnchantment(item)
                 && !hasExclusiveConflict(item, ench)) applicable.add(ench);
         }
@@ -167,17 +212,53 @@ public class EnchantmentAcquisitionManager implements Listener {
         double chance = plugin.getConfig().getDouble("enchanting-table.chance", 0.5);
         if (rand.nextDouble() >= chance) return;
 
-        int countMin = plugin.getConfig().getInt("enchanting-table.count-min", 1);
-        int countMax = plugin.getConfig().getInt("enchanting-table.count-max", 1);
-        int count = countMin == countMax ? countMin
-            : countMin + rand.nextInt(countMax - countMin + 1);
+        // 按稀有度权重挑 1 个，等级按 1/level 权重（等级越高越难出）
+        CustomEnchantment chosen = weightedPick(applicable, rand);
+        if (chosen == null) return;
+        int level = weightedLevel(chosen, rand);
+        chosen.applyEnchantment(item, level);
+    }
 
-        Collections.shuffle(applicable);
-        for (int i = 0; i < count && i < applicable.size(); i++) {
-            CustomEnchantment ench = applicable.get(i);
-            int level = 1 + rand.nextInt(ench.getMaxLevel());
-            ench.applyEnchantment(item, level);
+    /** 按稀有度权重挑一个附魔：诅咒 30、mob-drops chance 推导（0.10→10 / 0.05→5 / 0.02→2）、默认 5 */
+    private CustomEnchantment weightedPick(List<CustomEnchantment> applicable, ThreadLocalRandom rand) {
+        double total = 0;
+        for (CustomEnchantment ench : applicable) total += rarityWeight(ench);
+        double r = rand.nextDouble() * total;
+        for (CustomEnchantment ench : applicable) {
+            r -= rarityWeight(ench);
+            if (r <= 0) return ench;
         }
+        return applicable.get(applicable.size() - 1);
+    }
+
+    private double rarityWeight(CustomEnchantment ench) {
+        if (ench.isCursed()) return 30;
+        var s = plugin.getConfig().getConfigurationSection("acquisition." + ench.getId());
+        if (s != null) {
+            List<?> raw = s.getList("mob-drops");
+            if (raw != null && !raw.isEmpty() && raw.get(0) instanceof Map<?, ?> m) {
+                double c = num(m, "chance", 0.0).doubleValue();
+                if (c >= 0.20) return 30;
+                if (c >= 0.08) return 10;
+                if (c >= 0.03) return 5;
+                return 2;
+            }
+        }
+        return 5;
+    }
+
+    /** 1/level 递减权重选等级（等级越高越难出） */
+    private int weightedLevel(CustomEnchantment ench, ThreadLocalRandom rand) {
+        int max = ench.getMaxLevel();
+        if (max <= 1) return 1;
+        double total = 0;
+        for (int l = 1; l <= max; l++) total += 1.0 / l;
+        double r = rand.nextDouble() * total;
+        for (int l = 1; l <= max; l++) {
+            r -= 1.0 / l;
+            if (r <= 0) return l;
+        }
+        return max;
     }
 
     // ==================== 附魔书创建（原版格式） ====================
@@ -232,11 +313,8 @@ public class EnchantmentAcquisitionManager implements Listener {
         if (b1 && b2) {
             // 两本书：合并升级
             handleBookMerge(event, item1, item2);
-        } else if (b1 && !item2.getType().isAir() && !isCustomBook(item2)) {
-            // 书 + 物品：应用附魔
-            handleBookApply(event, item1, item2);
         } else if (b2 && !item1.getType().isAir() && !isCustomBook(item1)) {
-            // 物品 + 书：应用附魔
+            // 原版摆法：物品在左(槽0) + 书在右(槽1) 应用附魔（书当祭品）
             handleBookApply(event, item2, item1);
         } else if (!b1 && !b2 && item1.getType() == item2.getType() && !item1.getType().isAir()) {
             // 两个同类型物品：合并自定义附魔（取最高等级）
@@ -259,15 +337,29 @@ public class EnchantmentAcquisitionManager implements Listener {
             }
         }
 
+        // deeper_dark 数据包附魔合并（转 PDC，取最高等级）
+        for (Map.Entry<Enchantment, Integer> entry : item1.getEnchantments().entrySet()) {
+            String id = DEEPER_DARK_MAP.get(entry.getKey().getKey().asString());
+            if (id == null) continue;
+            CustomEnchantment ench = enchantmentManager.getEnchantment(id);
+            if (ench == null) continue;
+            int merged = Math.max(entry.getValue(), item2.getEnchantmentLevel(entry.getKey()));
+            if (merged > ench.getEnchantmentLevel(item1)) {
+                result = ench.applyEnchantment(result, merged);
+                changed = true;
+            }
+        }
+        changed |= convertDeeperDarkEnchants(result);        // 清掉结果上残留的原版 deeper_dark
+
         if (changed) {
             applyRename(event, result);
             event.setResult(result);
-            // 牺牲槽消耗由 onAnvilTake 处理（纯 Paper API，替代原 NMS 反射）
-            event.getInventory().setRepairCost(Math.min(39, event.getInventory().getRepairCost() + 1));
+            setAnvilCost(event, result);
         }
     }
 
     /** 把铁砧命名框输入的名字应用到结果物品（命名 + 合并同时生效） */
+    @SuppressWarnings("removal") // AnvilInventory.getRenameText() 暂无 1.21.8 替代 API
     private void applyRename(org.bukkit.event.inventory.PrepareAnvilEvent event, ItemStack result) {
         String rename = event.getInventory().getRenameText();
         if (rename == null || rename.isEmpty()) return;
@@ -287,21 +379,103 @@ public class EnchantmentAcquisitionManager implements Listener {
     }
 
     /**
-     * 铁砧取走结果时，若牺牲槽是自定义附魔书/物品（原版 onlyRenaming 不消耗），
-     * 手动清空牺牲槽防止白嫖复制。纯 Paper API，无 NMS。
+     * 铁砧取走（自定义结果）。
+     * - 正常点击：vanilla 读取结果槽交给玩家并消耗输入；成本由 setAnvilCost 设置的 AnvilView
+     *   成本自动扣费（vanilla 对 PDC 附魔算出的成本=0，必须在 PrepareAnvilEvent 显式设置）。
+     * - shift+点击：接管取走——取消原版点击，手动「给玩家物品 + 消耗输入槽 + 清结果槽 + 扣经验」。
+     * Folia：铁砧背包归玩家所有，InventoryClickEvent 在玩家区域线程触发，安全。
      */
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.HIGH)
     public void onAnvilTake(org.bukkit.event.inventory.InventoryClickEvent event) {
-        if (event.isCancelled()) return;
         if (event.getRawSlot() != 2) return;                 // 仅铁砧结果槽
-        if (!(event.getClickedInventory() instanceof org.bukkit.inventory.AnvilInventory anvil)) return;
-        // 结果槽为空时点取不算取走，避免误吞牺牲槽物品
+        if (!(event.getView().getTopInventory() instanceof org.bukkit.inventory.AnvilInventory inv)) return;
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+
         ItemStack result = event.getCurrentItem();
         if (result == null || result.getType().isAir()) return;
-        ItemStack sacrifice = anvil.getItem(1);
-        if (hasCustomEnchantPDC(sacrifice)) {
-            anvil.setItem(1, null);
+        if (!hasCustomEnchantPDC(result)) return;            // 只接管自定义附魔结果
+
+        int cost = customEnchantCost(result);
+        if (player.getLevel() < cost) {
+            player.sendMessage(org.bukkit.ChatColor.RED + "经验不足，需要 " + cost + " 级经验");
+            event.setCancelled(true);
+            return;
         }
+
+        if (!event.isShiftClick()) {
+            // 正常点击：取走与扣费均由 vanilla 完成（setAnvilCost 已把成本设为 customEnchantCost）
+            return;
+        }
+
+        // shift+点击：vanilla 拒绝纯 PDC，手动接管取走
+        event.setCancelled(true);
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(result);
+        if (!leftover.isEmpty()) {
+            player.sendMessage(org.bukkit.ChatColor.RED + "背包空间不足，无法取走");
+            return;                                          // 非堆叠物品 addItem 要么全放要么全拒
+        }
+        consumeInputs(inv);
+        inv.setItem(2, null);
+        if (cost > 0) player.setLevel(player.getLevel() - cost);
+        player.playSound(player.getLocation(), Sound.BLOCK_ANVIL_USE, 1.0f, 1.0f);
+    }
+
+    /** 取走时消耗铁砧两个输入槽（各减 1，不足则清空） */
+    private void consumeInputs(org.bukkit.inventory.AnvilInventory inv) {
+        for (int i = 0; i <= 1; i++) {
+            ItemStack input = inv.getItem(i);
+            if (input == null || input.getType().isAir()) continue;
+            if (input.getAmount() <= 1) inv.setItem(i, null);
+            else { input.setAmount(input.getAmount() - 1); inv.setItem(i, input); }
+        }
+    }
+
+    /** 取附魔书的「存储附魔」（原版书用 StoredEnchants，ItemStack.getEnchantments 对书为空） */
+    private Map<Enchantment, Integer> getBookStoredEnchants(ItemStack book) {
+        if (book == null || !book.hasItemMeta()) return Map.of();
+        ItemMeta meta = book.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.EnchantmentStorageMeta esm) {
+            return esm.getStoredEnchants();
+        }
+        return Map.of();
+    }
+
+    /** 把物品上残留的 deeper_dark 原版附魔转成 YinwuEnchant PDC 附魔并移除原版 */
+    private boolean convertDeeperDarkEnchants(ItemStack item) {
+        if (item == null || item.getType().isAir() || !item.hasItemMeta()) return false;
+        boolean changed = false;
+        for (Map.Entry<Enchantment, Integer> entry : item.getEnchantments().entrySet()) {
+            String id = DEEPER_DARK_MAP.get(entry.getKey().getKey().asString());
+            if (id == null) continue;
+            CustomEnchantment ench = enchantmentManager.getEnchantment(id);
+            if (ench == null) continue;
+            item.removeEnchantment(entry.getKey());
+            ench.applyEnchantment(item, Math.max(1, entry.getValue()));
+            changed = true;
+        }
+        return changed;
+    }
+
+    /** 原版铁砧等级逻辑：0→level、同等级升 1、已更高跳过（返回 0）；返回应用等级 */
+    private int resolveAppliedLevel(CustomEnchantment ench, ItemStack target, int level) {
+        int current = ench.getEnchantmentLevel(target);
+        if (current == 0) return level;
+        if (current == level && level < ench.getMaxLevel()) return level + 1;
+        if (current > level) return 0;
+        return level;
+    }
+
+    /** 结果物品上自定义附魔等级之和 = 铁砧成本（级） */
+    private int customEnchantCost(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return 0;
+        ItemMeta meta = item.getItemMeta();
+        int total = 0;
+        for (CustomEnchantment ench : enchantmentManager.getAllEnchantments().values()) {
+            Integer lvl = meta.getPersistentDataContainer().get(ench.getEnchantmentKey(),
+                org.bukkit.persistence.PersistentDataType.INTEGER);
+            if (lvl != null) total += lvl;
+        }
+        return total;
     }
 
     /** 物品是否带任意自定义附魔 PDC（自定义书或已附魔物品） */
@@ -355,12 +529,60 @@ public class EnchantmentAcquisitionManager implements Listener {
                 if (result != null) {
                     applyRename(event, result);
                     event.setResult(result);
-                    // 牺牲槽消耗由 onAnvilTake 处理（纯 Paper API，替代原 NMS 反射）
-                    event.getInventory().setRepairCost(Math.min(39, event.getInventory().getRepairCost() + 1));
+                    setAnvilCost(event, result);
                 }
                 return;
             }
         }
+
+        // deeper_dark 数据包附魔书合并升级（两本同等级 → 升 1 级）
+        Map<Enchantment, Integer> stored1 = getBookStoredEnchants(book1);
+        Map<Enchantment, Integer> stored2 = getBookStoredEnchants(book2);
+        for (Map.Entry<Enchantment, Integer> entry : stored1.entrySet()) {
+            String id = DEEPER_DARK_MAP.get(entry.getKey().getKey().asString());
+            if (id == null) continue;
+            CustomEnchantment ench = enchantmentManager.getEnchantment(id);
+            if (ench == null) continue;
+            Integer level1 = entry.getValue();
+            Integer level2 = stored2.get(entry.getKey());
+            if (level1 > 0 && level1.equals(level2)) {
+                int newLevel = level1 + 1;
+                if (newLevel > ench.getMaxLevel()) continue;
+                ItemStack result = createEnchantedBook(ench.getId(), newLevel);
+                if (result != null) {
+                    applyRename(event, result);
+                    event.setResult(result);
+                    setAnvilCost(event, result);
+                }
+                return;
+            }
+        }
+
+        // 两书同一自定义/deeper_dark 附魔且都已在最高级 → 无有效升级，清掉 vanilla 的冗余结果预览
+        if (hasSameCustomEnchantAtMax(book1, book2)) {
+            event.setResult(null);
+        }
+    }
+
+    /** 两书是否含同一自定义/deeper_dark 附魔且两书都已在最高级（铁砧无可升级，应清冗余预览） */
+    private boolean hasSameCustomEnchantAtMax(ItemStack book1, ItemStack book2) {
+        Map<Enchantment, Integer> stored1 = getBookStoredEnchants(book1);
+        Map<Enchantment, Integer> stored2 = getBookStoredEnchants(book2);
+        for (Map.Entry<Enchantment, Integer> entry : stored1.entrySet()) {
+            String id = DEEPER_DARK_MAP.get(entry.getKey().getKey().asString());
+            if (id == null) continue;
+            CustomEnchantment ench = enchantmentManager.getEnchantment(id);
+            if (ench == null) continue;
+            if (entry.getValue() < ench.getMaxLevel()) continue;
+            Integer other = stored2.get(entry.getKey());
+            if (other != null && other.equals(entry.getValue())) return true;
+        }
+        for (CustomEnchantment ench : enchantmentManager.getAllEnchantments().values()) {
+            int l1 = ench.getEnchantmentLevel(book1);
+            if (l1 == 0 || l1 < ench.getMaxLevel()) continue;
+            if (ench.getEnchantmentLevel(book2) == l1) return true;
+        }
+        return false;
     }
 
     /** 附魔书 + 物品：把附魔应用到物品（铁砧） */
@@ -368,6 +590,31 @@ public class EnchantmentAcquisitionManager implements Listener {
         ItemMeta bookMeta = book.getItemMeta();
         if (bookMeta == null) return;
 
+        // 附魔诅咒：目标物品无法被铁砧修改（附魔应用；仅在该附魔启用时生效）
+        CustomEnchantment curse = enchantmentManager.getEnchantment("curse_of_enchant");
+        if (curse != null && plugin.getConfigManager().isEnchantmentEnabled("curse_of_enchant")
+                && curse.hasEnchantment(target)) return;
+
+        // deeper_dark 数据包附魔书（Folia 上数据包附魔不生效）→ 转成 YinwuEnchant PDC 附魔
+        for (Map.Entry<Enchantment, Integer> entry : getBookStoredEnchants(book).entrySet()) {
+            String id = DEEPER_DARK_MAP.get(entry.getKey().getKey().asString());
+            if (id == null) continue;
+            CustomEnchantment ench = enchantmentManager.getEnchantment(id);
+            if (ench == null || !ench.canApplyTo(target)) continue;
+            if (hasExclusiveConflict(target, ench)) continue;
+
+            int applied = resolveAppliedLevel(ench, target, entry.getValue());
+            if (applied <= 0) continue;
+            ItemStack result = target.clone();
+            result = ench.applyEnchantment(result, applied);
+            convertDeeperDarkEnchants(result);             // 清掉结果上残留的原版 deeper_dark
+            applyRename(event, result);
+            event.setResult(result);
+            setAnvilCost(event, result);
+            return;
+        }
+
+        // 原有 PDC 附魔书
         for (CustomEnchantment ench : enchantmentManager.getAllEnchantments().values()) {
             Integer level = bookMeta.getPersistentDataContainer().get(ench.getEnchantmentKey(),
                 org.bukkit.persistence.PersistentDataType.INTEGER);
@@ -375,21 +622,25 @@ public class EnchantmentAcquisitionManager implements Listener {
             if (!ench.canApplyTo(target)) continue;
             if (hasExclusiveConflict(target, ench)) continue;
 
-            // 原版铁砧逻辑：已有更高等级则跳过，同等级则升级
-            int current = ench.getEnchantmentLevel(target);
-            int applied;
-            if (current == 0) applied = level;
-            else if (current == level && level < ench.getMaxLevel()) applied = level + 1;
-            else if (current > level) continue;
-            else applied = level;
-
+            int applied = resolveAppliedLevel(ench, target, level);
+            if (applied <= 0) continue;
             ItemStack result = target.clone();
             result = ench.applyEnchantment(result, applied);
             applyRename(event, result);
             event.setResult(result);
-            // 牺牲槽消耗由 onAnvilTake 处理（纯 Paper API，替代原 NMS 反射）
-            event.getInventory().setRepairCost(Math.min(39, event.getInventory().getRepairCost() + 1));
+            setAnvilCost(event, result);
             return;
+        }
+    }
+
+    /**
+     * 设铁砧成本（显示 + vanilla 取走时扣费）。
+     * 1.21 必须走 AnvilView API：AnvilInventory#setRepairCostAmount 已失效（SPIGOT-7853），不显示也不生效。
+     * 显示值与 onAnvilTake 手动扣费用的 customEnchantCost 保持一致。
+     */
+    private void setAnvilCost(org.bukkit.event.inventory.PrepareAnvilEvent event, ItemStack result) {
+        if (event.getView() instanceof org.bukkit.inventory.view.AnvilView view) {
+            view.setRepairCost(Math.min(39, customEnchantCost(result)));
         }
     }
 
