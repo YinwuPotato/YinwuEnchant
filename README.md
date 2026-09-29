@@ -1,7 +1,7 @@
 # YinwuEnchant — Yinwu附魔
 # YinwuEnchant — Custom Enchantments
 
-**最新版本：v1.2.5** | [下载 Release](https://github.com/qumingjam/YinwuEnchant/releases/tag/v1.2.5)
+**最新版本：v1.2.5** | [下载 Release](https://github.com/YinwuPotato/YinwuEnchant/releases/tag/v1.2.5)
 
 34 个自定义附魔，基于 PDC（PersistentDataContainer）存储，全部 Folia 线程安全。
 
@@ -132,7 +132,7 @@ YinwuEnchant
 ## 构建
 
 ```bash
-git clone https://github.com/qumingjam/YinwuEnchant.git
+git clone https://github.com/YinwuPotato/YinwuEnchant.git
 cd YinwuEnchant
 mvn clean package
 ```
@@ -143,13 +143,13 @@ mvn clean package
 
 ## 依赖
 
-- **[YinwuPluginLib](https://github.com/qumingjam/YinwuPluginLib)**（必需）
+- **[YinwuPluginLib](https://github.com/YinwuPotato/YinwuPluginLib)**（必需）
 - **Paper API 1.21+**（provided）
 
 ---
 
 ## 链接
 
-- 仓库：[github.com/qumingjam/YinwuEnchant](https://github.com/qumingjam/YinwuEnchant)
-- 关联：[YinwuForge](https://github.com/qumingjam/YinwuForge) | [YinwuRaid](https://github.com/qumingjam/YinwuRaid)
+- 仓库：[github.com/YinwuPotato/YinwuEnchant](https://github.com/YinwuPotato/YinwuEnchant)
+- 关联：[YinwuForge](https://github.com/YinwuPotato/YinwuForge) | [YinwuRaid](https://github.com/YinwuPotato/YinwuRaid)
 - 作者：Qumingjam
