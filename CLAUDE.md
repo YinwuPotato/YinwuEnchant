@@ -4,7 +4,7 @@
 - **技术栈**: Java 21, Maven, Paper API 1.21.4
 - **打包**: `mvn clean package` → `target/YinwuEnchant-<version>.jar`
 - **Folia 兼容**: 是
-- **GitHub**: https://github.com/qumingjam/YinwuEnchant
+- **GitHub**: https://github.com/YinwuPotato/YinwuEnchant
 
 ## 功能
 - 12 个独特的自定义附魔（战斗、探索、农业、防御等）
