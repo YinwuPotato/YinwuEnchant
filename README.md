@@ -164,6 +164,13 @@ mvn clean package
 
 ---
 
+
+## License | 许可证
+
+LGPL-3.0 —— 见 [LICENSE](LICENSE)。
+
+---
+
 ## 链接
 
 - 仓库：[github.com/YinwuPotato/YinwuEnchant](https://github.com/YinwuPotato/YinwuEnchant)
