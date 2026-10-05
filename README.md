@@ -22,7 +22,7 @@
 | 幽匿探测 | 望远镜高亮监守者 | 望远镜 | 幽匿维度 |
 | 猫爪 | 恐吓苦力怕 | 靴子 | 击杀猪灵 |
 | 狗头 | 恐吓骷髅 | 头盔 | 击杀潜影贝 |
-| 幻影 | 驱离幻翼 | 胸甲/鞘翅 | 击杀幻翼 |
+| 幻影 | 驱离幻翼 | 胸甲 | 击杀幻翼 |
 | 切肉大师 | 额外肉类掉落（3级），联动抢夺+火焰附加→熟肉 | 剑 | 击杀掠夺者 |
 | 丰收 | 右键收获作物+自动补种 | 锄头 | 钓鱼 |
 | 熔化 | 自动熔炼方块（100+配方） | 工具 | 击杀岩浆怪(10%) |
@@ -47,11 +47,13 @@
 | 回声射击 | 箭命中音爆 AOE | 弓/弩 | 击杀监守者 |
 | 风暴之箭 | 箭命中召唤闪电（视觉+AoE+冷却） | 弓/弩 | 击杀溺尸 |
 | 爆炸之箭 | 箭命中产生爆炸（火焰+TNT 混合特效） | 弓/弩 | 击杀苦力怕 |
-| 脆弱诅咒 | [负面] 耐久损耗加快 | 耐久类 | 附魔台 |
-| 附魔诅咒 | [负面] 无法再附魔/铁砧修改 | 耐久类 | 附魔台 |
-| 笨拙诅咒 | [负面] 削弱武器伤害 | 剑 | 附魔台 |
-| 矮人化 | [负面] 体型缩小+攻击削弱 | 护腿 | 附魔台 |
-| 巨人化 | [负面] 体型变大 | 护腿 | 附魔台 |
+| 脆弱诅咒 | [负面] 耐久损耗加快 | 耐久类 | 击杀铁傀儡(30%) / 附魔台 |
+| 附魔诅咒 | [负面] 无法再附魔/铁砧修改 | 耐久类 | 击杀唤魔者(30%) / 附魔台 |
+| 笨拙诅咒 | [负面] 削弱武器伤害 | 剑 | 击杀僵尸(30%) / 附魔台 |
+| 矮人化 | [负面] 体型缩小+攻击削弱 | 护腿 | 击杀史莱姆(30%) / 附魔台 |
+| 巨人化 | [负面] 体型变大 | 护腿 | 击杀岩浆怪(30%) / 附魔台 |
+
+> 5 个诅咒的怪物掉落概率均为 30%；附魔台路径由 `enchanting-table.include-curses: true` 控制。
 
 ---
 
@@ -65,7 +67,7 @@ Deeper Dark 数据包产出的原版附魔书（`deeper_dark:*`，行为靠数�
 
 玩家可在游戏内对**单个物品上的每个自定义附魔**独立开启/关闭（27 格单格按钮布局）：
 
-1. `/ye gui` 打开附魔目录 → 右下角点「附魔开关」（或直接 `/ye toggle`）
+1. `/ye gui` 打开附魔目录 → 点**正中**的「附魔开关」（或直接 `/ye toggle`）
 2. 把物品放入二级界面左侧格子（支持 shift 点击整组放入）
 3. 右侧列出该物品的全部自定义附魔，点击按钮切换
 
@@ -107,11 +109,11 @@ YinwuEnchant
 │   ├── EnchantmentGUI           # /ye gui 附魔目录 GUI
 │   └── EnchantmentToggleGUI     # 二级界面：单物品附魔独立开关
 ├── manager/
-│   ├── EnchantmentManager       # 附魔管理器 + 事件订阅者模式
-│   ├── EnchantmentAcquisition   # 获取系统（掉落/钓鱼/附魔台/铁砧）
-│   ├── EnchantmentLore          # Lore 显示（含禁用态删除线）
-│   ├── ConfigManager            # 配置管理
-│   └── CommandHandler           # /ye 命令
+│   ├── EnchantmentManager            # 附魔管理器 + 事件订阅者模式
+│   ├── EnchantmentAcquisitionManager # 获取系统（掉落/钓鱼/附魔台/铁砧）
+│   ├── EnchantmentLore               # Lore 显示（含禁用态删除线）
+│   ├── ConfigManager                 # 配置管理
+│   └── CommandHandler                # /ye 命令
 └── api/                    # EnchantAPIImpl（ServicesManager）
 ```
 
@@ -119,8 +121,11 @@ YinwuEnchant
 
 ## 命令
 
+主命令名是 `/yinwuenchant`，别名 `/ye`（下表用别名简写）。
+
 | 命令 | 说明 | 权限 |
 |------|------|------|
+| `/yinwuenchant` | 不带子命令 = 输出帮助 | `yinwu.enchant.use` |
 | `/ye gui` | 打开附魔目录 GUI | `yinwu.enchant.use` |
 | `/ye toggle` | 打开单物品附魔开关界面 | `yinwu.enchant.use` |
 | `/ye give <玩家> <附魔> [等级]` | 给予附魔物品 | `yinwu.enchant.admin` |
@@ -138,6 +143,17 @@ mvn clean package
 ```
 
 产出：`target/YinwuEnchant-1.2.5.jar`
+
+> **前置步骤（首次构建必需）**：本插件依赖共享库 `YinwuPluginLib`，而它不在 Maven 中央仓库。
+> 首次构建前先克隆并安装一次：
+>
+> ```bash
+> git clone https://github.com/YinwuPotato/YinwuPluginLib.git
+> cd YinwuPluginLib && mvn clean install
+> ```
+>
+> 之后回到本仓库 `mvn clean package` 即可。父 POM（`net.yinwu:YinwuPlugins:1.0.1`）
+> 已随仓库提供在 `parent/pom.xml`，无需额外操作。
 
 ---
 

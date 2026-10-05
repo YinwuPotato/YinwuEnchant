@@ -8,7 +8,7 @@
         <groupId>net.yinwu</groupId>
         <artifactId>YinwuPlugins</artifactId>
         <version>1.0.1</version>
-        <relativePath>../pom.xml</relativePath>
+        <relativePath>parent/pom.xml</relativePath>
     </parent>
 
     <groupId>YinwuEnchant</groupId>

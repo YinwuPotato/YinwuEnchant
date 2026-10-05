@@ -1,13 +1,15 @@
 # YinwuEnchant — 自定义附魔插件
 
 ## 项目信息
-- **技术栈**: Java 21, Maven, Paper API 1.21.4
+- **技术栈**: Java 21, Maven, Paper API 1.21.8
 - **打包**: `mvn clean package` → `target/YinwuEnchant-<version>.jar`
+- **前置**: [YinwuPluginLib](https://github.com/YinwuPotato/YinwuPluginLib) 需先 `mvn clean install`
 - **Folia 兼容**: 是
 - **GitHub**: https://github.com/YinwuPotato/YinwuEnchant
 
 ## 功能
-- 12 个独特的自定义附魔（战斗、探索、农业、防御等）
+- 34 个自定义附魔（21 个原创 + 13 个 NeoEnchant 移植；PDC 存储，非原版注册表）
+- 单物品附魔开关 GUI（27 格；诅咒类 5 个锁定不可关）
 - 高度可配置，提供开发者 API
 
 ## 共享规则

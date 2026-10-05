@@ -264,7 +264,7 @@ public class EnchantmentGUI {
             case "cats_paw" -> { l.add(lore("适用物品: 鞋子")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 周期性恐吓苦力怕")); l.add(lore("附魔来源: 击杀猪灵")); }
             case "nasus" -> { l.add(lore("适用物品: 头盔")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 周期性恐吓骷髅类怪物")); l.add(lore("附魔来源: 击杀潜影贝")); }
             case "master_of_beef_slicing" -> { l.add(lore("适用物品: 剑")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 攻击生物额外掉落肉类")); l.add(lore("附魔来源: 击杀掠夺者/卫道士")); }
-            case "phantom" -> { l.add(lore("适用物品: 胸甲/鞘翅")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 防止幻翼攻击")); l.add(lore("附魔来源: 击杀幻翼")); }
+            case "phantom" -> { l.add(lore("适用物品: 胸甲")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 防止幻翼攻击")); l.add(lore("附魔来源: 击杀幻翼")); }
             case "harvest" -> { l.add(lore("适用物品: 锄头")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 右键收获成熟作物")); l.add(lore("附魔来源: 钓鱼")); }
             case "insomnia" -> { l.add(lore("适用物品: 头盔")); l.add(ChatColor.RED + "负面附魔"); l.add(lore("附魔效果: 无法入睡，积累未睡眠天数")); }
             case "soulbound" -> { l.add(lore("适用物品: 武器/工具/盔甲/盾牌/鞘翅")); l.add(lore("最高等级: " + ench.getMaxLevel())); l.add(lore("附魔效果: 死亡时保留附魔物品")); l.add(lore("附魔来源: 击杀幻术师")); }
