@@ -159,7 +159,7 @@ mvn clean package
 
 ## 依赖
 
-- **[YinwuPluginLib](https://github.com/YinwuPotato/YinwuPluginLib)**（必需）
+- **[YinwuPluginLib](https://github.com/YinwuPotato/YinwuPluginLib)**（**构建期**前置 —— 构建产物已把该库 shade 进 jar，服务器上**不需要**单独安装它）
 - **Paper API 1.21+**（provided）
 
 ---
