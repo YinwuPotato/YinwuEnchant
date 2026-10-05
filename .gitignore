@@ -22,3 +22,6 @@ untitled-*.md
 ## Project notes (local only)
 agents.md
 dependency-reduced-pom.xml
+
+### 构建/运行产物（统一补充）###
+*.stackdump
